@@ -1,0 +1,3119 @@
+#+TITLE: init.el
+#+BEGIN_SRC emacs-lisp :tangle no
+;; This file replaces itself with the actual configuration at first run.
+
+;; We can't tangle without org!
+(require 'org)
+;; Open the configuration
+(find-file (concat user-emacs-directory "init.org"))
+;; tangle it
+(org-babel-tangle)
+;; load it
+(load-file (concat user-emacs-directory "init.el"))
+;; finally byte-compile it
+(byte-compile-file (concat user-emacs-directory "init.el"))
+#+END_SRC
+
+
+#+TITLE: Emacs configuration file
+#+PROPERTY: header-args :tangle yes
+
+* Startup
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;; init.el --- Global settings -*- lexical-binding: t; -*-
+
+;;; Commentary:
+
+;; Here be dragons
+
+;;; Code:
+;; https://github.com/larstvei/dot-emacs
+(defun tangle-init ()
+  "If the current buffer is 'init.org' the code-blocks are
+tangled, and the tangled file is compiled."
+  (when (equal (buffer-file-name)
+               (expand-file-name (concat user-emacs-directory "init.org")))
+    ;; Avoid running hooks when tangling.
+    (let ((prog-mode-hook nil))
+      (org-babel-tangle)
+      (byte-compile-file (concat user-emacs-directory "init.el")))))
+
+(add-hook 'after-save-hook 'tangle-init)
+
+;;(add-hook
+;;'after-init-hook
+;; (lambda ()
+;;   (let ((private-file (concat user-emacs-directory "private.el")))
+;;     (when (file-exists-p private-file)
+;;       (load-file private-file))
+;;     (when (file-exists-p custom-file)
+;;       (load-file custom-file))
+;;     (server-start))))
+
+;;(let ((old-gc-treshold gc-cons-threshold))
+;;  (setq gc-cons-threshold most-positive-fixnum)
+;;  (add-hook 'after-init-hook
+;;            (lambda () (setq gc-cons-threshold old-gc-treshold))))  
+
+;; Increase the garbage collection threshold to 500 MB to ease startup
+(setq gc-cons-threshold (* 500 1024 1024))
+
+
+;;; Startup timing
+
+(defvar my-start-time (current-time)
+  "Time when Emacs was started")
+
+(require 'cl-lib) ;; Needed for case in replace-matching-parens.
+(require 'package)
+(setq package-enable-at-startup nil)
+
+
+
+;;; Package loading
+
+;; Don't load old .elc files when the .el file is newer
+(setq load-prefer-newer t)
+
+
+
+;;; Begin initialization
+;; Turn off mouse interface early in startup to avoid momentary display
+;;(when window-system
+;;;;	(menu-bar-mode -1)
+;;	(tool-bar-mode -1)
+;;	(scroll-bar-mode -1)
+;;	(tooltip-mode -1)
+;;  )
+
+;; https://emacs.stackexchange.com/questions/39359/tool-bar-in-emacsclient
+(defun my-frame-tweaks (&optional frame)
+  "My personal frame tweaks."
+  (unless frame
+    (setq frame (selected-frame)))
+  (when frame
+    (with-selected-frame frame
+      (when (display-graphic-p)
+;;	(menu-bar-mode -1)
+	  (tool-bar-mode -1)
+	  (scroll-bar-mode -1)
+	  (tooltip-mode -1)
+    ))))
+
+;; For the case that the init file runs after the frame has been created.
+;; Call of emacs without --daemon option.
+(my-frame-tweaks) 
+;; For the case that the init file runs before the frame is created.
+;; Call of emacs with --daemon option.
+(add-hook 'after-make-frame-functions #'my-frame-tweaks t)
+
+
+
+(setq inhibit-startup-message t)
+(setq initial-scratch-message "")
+
+
+
+;; Customizations set using Emacs’ customization system go here.
+;; (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+
+
+;; ;; List package archives and initialize them
+;; (when (>= emacs-major-version 24)
+;;   (require 'package)
+;;   (add-to-list 'package-archives '("melpa milkbox" . "http://melpa.milkbox.net/packages/") t)
+;;   (add-to-list 'package-archives '("melpa stable" . "https://stable.melpa.org/packages/") t)
+;;   (add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/") t))
+;; (when (< emacs-major-version 24)
+;;   ;; For important compatibility libraries like cl-lib
+;;   (add-to-list 'package-archives '("gnu" . "http://elpa.gnu.org/packages/")))
+;; (package-initialize)
+
+
+;; set up package sources
+;; http://cestlaz.github.io/posts/using-emacs-32-cpp/#.WmpPxnXwaAk
+(require 'package)
+(setq package-enable-at-startup nil)
+(setq package-archives
+	  ;; Package archives, the usual suspects
+      '(("MELPA"        . "https://melpa.org/packages/")
+;;	("MELPA Milkbox". "http://melpa.milkbox.net/packages/")
+	("MELPA Stable" . "https://stable.melpa.org/packages/")
+	("GNU ELPA"     . "http://elpa.gnu.org/packages/"))
+
+      ;; Prefer MELPA and MELPA Milkbox over MELPA Stable and GNU ELPA.
+	  ;; IOW prefer MELPA's stablepackages over everything and
+	  ;; only fall back to GNU or MELPA stable if necessary.
+      package-archive-priorities
+      '(("MELPA"        . 10)
+;;	("MELPA Milkbox". 10)
+	("MELPA Stable" . 5)
+	("GNU ELPA"     . 1))
+
+      ;; Pin a couple of packages to MELPA
+      package-pinned-packages
+      '(;; I maintain these and know what changes
+		("flycheck"        . "MELPA")
+		("auto-yasnippet"  . "MELPA")
+        ;; Last release was a long time ago for these
+		;; ("ein"       . "MELPA Stable")
+		("ivy"             . "MELPA")
+		("ivy-hydra"       . "MELPA")
+		;; ("magit"           . "MELPA")
+		;; ("magithub"        . "MELPA")
+		("counsel"         . "MELPA")
+		("swiper"          . "MELPA")))
+(package-initialize)
+
+(unless (package-installed-p 'use-package)
+	(package-refresh-contents)
+	(package-install 'use-package))
+
+(if (daemonp)
+      (setq use-package-always-demand t))
+	  
+;; https://github.com/raxod502/straight.el
+(defvar bootstrap-version)
+(let ((bootstrap-file
+       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+      (bootstrap-version 5))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
+(straight-use-package 'use-package)
+
+(eval-when-compile
+  (require 'use-package))
+
+(use-package diminish :ensure t)
+(require 'diminish)
+(require 'bind-key)
+
+(setq use-package-verbose t)
+(setq use-package-check-before-init t)
+(setq use-package-minimum-reported-time 0.01)
+
+
+(use-package el-patch	:straight t)
+
+;;	(use-package unicode-fonts	:ensure t)
+;;	(prefer-coding-system 'utf-8)
+	(set-language-environment "UTF-8")
+;;	(require 'unicode-fonts)
+;;	(unicode-fonts-setup)
+  
+;; Load config.org - my Emacs configuration
+;; (org-babel-load-file (concat user-emacs-directory "config.org"))
+
+;; Garbage collector - decrease threshold to 5 MB
+(add-hook 'after-init-hook (lambda () (setq gc-cons-threshold (* 5 1024 1024))))
+;;; init.el ends here
+
+;;(message "Early garbage:\n%s" (garbage-collect))
+;;(message "Start up time %.2fs" (float-time (time-subtract (current-time) my-start-time)))
+#+END_SRC
+
+
+* User Information
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(setq user-full-name "Yong Chul Ju")
+(setq user-mail-address "yochju@gmail.com")
+#+END_SRC
+
+
+* EXWM
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package exwm
+  :ensure t
+  :config  
+  (require 'exwm)
+  (require 'exwm-config)
+  ;; (exwm-config-example)
+  ;; (exwm-config-default)
+  
+;; https://pastebin.com/rQruk4gc
+;;,------------
+;;| Fringe mode
+;;`------------
+(fringe-mode 1)
+
+(require 'exwm-systemtray)
+(exwm-systemtray-enable)
+ 
+(setq exwm-workspace-number 10)
+(setq exwm-workspace-show-all-buffers t)
+(setq exwm-layout-show-all-buffers t)
+
+;,-------------------
+;;| Brightness Control
+;;`-------------------
+(exwm-input-set-key (kbd "<XF86MonBrightnessUp>")
+					(lambda ()
+					  (interactive)
+					  (start-process "" nil "acpilight" "-inc" "20")))
+ 
+(exwm-input-set-key (kbd "<XF86MonBrightnessDown>")
+					(lambda ()
+					  (interactive)
+					  (start-process "" nil "acpilight" "-dec" "20")))
+ 
+;;,---------------
+;;| Volume Control
+;;`---------------
+(exwm-input-set-key (kbd "<XF86AudioRaiseVolume>")
+					(lambda ()
+					  (interactive)
+					  (start-process "" nil "amixer" "-D" "pulse" "sset" "Master" "5%+")))
+ 
+(exwm-input-set-key (kbd "<XF86AudioLowerVolume>")
+					(lambda ()
+					  (interactive)
+					  (start-process "" nil "amixer" "-D" "pulse" "sset" "Master" "5%-")))
+ 
+(exwm-input-set-key (kbd "<XF86AudioMute>")
+					(lambda ()
+					  (interactive)
+					  (start-process "" nil "amixer" "-D" "pulse" "set" "Master" "toggle")))
+
+
+(require 'exwm-randr)
+(setq exwm-randr-workspace-output-plist '(0 "LVDS-0" 1 "DP-1"))
+(add-hook 'exwm-randr-screen-change-hook
+          (lambda ()
+            (start-process-shell-command
+             "xrandr" nil "xrandr --output LVDS-0 --right-of DP-1 --auto")))
+(exwm-enable)
+(exwm-randr-enable)
+)
+#+END_SRC
+
+
+* Global Functionalities at Startup 
+
+** Defer loading most packages for quicker startup times
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; (setq use-package-always-defer t)
+#+END_SRC
+
+** Display Time
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;(setq-default display-time-format " [ %H:%M:%S ] ")
+;;(setq-default display-time-24hr-format " [ %H:%M:%S ] ")
+;;(setq-default display-time-default-load-average nil)
+;;(setq display-time-format "%I:%M:%S")
+;;(display-time)
+#+END_SRC 
+
+** ESUP - Emacs Start Up Profiler
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/jschaf/esup
+(use-package esup
+	:ensure t
+	;; To use MELPA Stable use ":pin mepla-stable",
+;;	:pin melpa
+	:commands (esup)
+)
+#+END_SRC
+
+** "y" instead of "yes"
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(defalias 'yes-or-no-p 'y-or-n-p)
+#+END_SRC
+
+
+** kill process buffer without confirmation
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://emacs.stackexchange.com/questions/14509/kill-process-buffer-without-confirmation
+(setq kill-buffer-query-functions nil)
+#+END_SRC
+
+
+** display line number
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(when (version<= "26.0.50" emacs-version)
+  (global-display-line-numbers-mode))
+#+END_SRC
+
+
+** scroll bar mode
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; --- scroll bar -------
+(set-scroll-bar-mode nil)
+#+END_SRC
+
+
+** cursor type and blink
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; --- cursor type -------
+;; https://www.gnu.org/software/emacs/manual/html_node/emacs/Cursor-Display.html
+;; (setq-default cursor-type 'box)
+(setq-default cursor-type 'hollow)
+;; (setq-default cursor-type '(bar . 1))
+;; (setq-default cursor-type '(hbar . 1))
+
+(blink-cursor-mode)
+#+END_SRC
+
+
+** tabs instead of spaces
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+(setq-default c-basic-offset 4
+              tab-width 4
+              indent-tabs-mode t)
+#+END_SRC
+
+
+** color theme
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+  ;; === color-theme =======
+  ;; (use-package atom-one-dark-theme :ensure t :defer t)
+  ;; (use-package noctilux-theme      :ensure t :defer t)
+  ;; (use-package darkokai-theme      :ensure t :defer t)
+  ;; (use-package github-theme        :ensure t :defer t)
+  ;; (use-package leuven-theme        :ensure t :defer t)
+  ;; (use-package monokai-theme       :ensure t :defer t)
+  ;; (use-package material-theme      :ensure t :defer t)
+  ;; (use-package paganini-theme      :ensure t :defer t)
+  ;; (use-package solarized-theme     :ensure t :defer t)
+  ;; (use-package sublime-themes      :ensure t :defer t)
+  ;; (use-package zenburn-theme       :ensure t :defer t)
+
+  ;; (use-package brin-theme          :ensure t :defer t)
+  ;; (use-package fogus-theme         :ensure t :defer t)
+  ;; (use-package granger-theme       :ensure t :defer t)
+  ;; (use-package hickey-theme        :ensure t :defer t)
+  ;; (use-package odersky-theme       :ensure t :defer t)
+  ;; (use-package wilson-themes       :ensure t :defer t)
+
+  ;; ;; --- atom-one-dark-theme -------
+  ;; (use-package atom-one-dark-theme :ensure t
+  ;;   ;; :disabled t
+  ;;   :ensure nil
+  ;;   ;; :load-path "site-lisp/atom-one-dark-theme"
+  ;;   :config (load-theme 'atom-one-dark 'no-confirm))
+
+  ;; ;; --- darkokai-theme -------
+  ;; (use-package darkokai-theme :ensure t
+  ;;   ;; :disabled t
+  ;;   :ensure nil
+  ;;   ;; :load-path "site-lisp/darkokai-theme"
+  ;;   :config (load-theme 'darkokai 'no-confirm))
+
+  ;; ;; --- github-theme -------
+  ;; (use-package github-theme :ensure t
+  ;;   ;; :disabled t
+  ;;   :ensure nil
+  ;;   ;; :load-path "site-lisp/github-theme"
+  ;;   :config (load-theme 'github 'no-confirm))
+
+  ;; ;; --- monokai-theme -------
+  ;; (use-package monokai-theme :ensure t
+  ;;   ;; :disabled t
+  ;;   :ensure nil
+  ;;   ;; :load-path "site-lisp/monokai-theme"
+  ;;   :config (load-theme 'monokai 'no-confirm))
+
+  ;; --- leuven-theme -------
+  ;;
+  ;; http://www.narrantec.com/2016/12/18/no-title/
+  ;; (use-package leuven-theme :ensure t
+  ;;   ;; :init
+  ;;   :config
+  ;;   ;; (load-theme 'leuven-dark t)
+  ;;   ;; (leuven-scale-outline-headlines nil)
+  ;;   ;; (set-face-attribute 'org-level-1 nil :overline nil) ; I don't like the overline in L1 and L2
+  ;;   ;; (set-face-attribute 'org-level-2 nil :overline nil) ;  Headings, so I remove it
+  ;;   ;; (set-face-attribute 'org-block-begin-line nil :underline nil)
+  ;;   ;; (set-face-attribute 'org-block-end-line nil :overline nil)
+
+  ;;   (setq leuven-scale-outline-headlines nil)
+  ;;   (setq leuven-scale-org-agenda-structure nil)
+  ;;   (setq org-fontify-whole-heading-line nil)
+  ;;   (load-theme 'leuven 'no-confirm))
+
+
+;; --- spacemacs-theme -------
+;;(use-package spacemacs-theme
+;;  :defer t
+;;  :init (load-theme 'spacemacs-dark t)
+;;)
+
+  (use-package spacemacs-common
+    :ensure spacemacs-theme
+    ;; :config (load-theme 'spacemacs-light t)
+    :config (load-theme 'spacemacs-dark t)
+  )
+
+
+  ;; ;; --- noctilux-theme -------
+  ;; (use-package noctilux-theme :ensure t
+  ;;   :config
+  ;;   ;; (load-theme 'leuven-dark t)
+  ;;   (load-theme 'noctilux 'no-confirm)
+  ;; )
+
+  ;; ;; --- ample-theme -------
+  ;; (use-package ample-theme :ensure t
+  ;;   :config
+  ;;   ;; (load-theme 'leuven-dark t)
+  ;;   (load-theme 'ample 'no-confirm))
+
+  ;; ;; --- monokai-theme -------
+  ;; (use-package molokai-theme :ensure t
+  ;;   :load-path "themes"
+  ;;   ;; :init (setq monokai-theme-kit t)
+  ;;   :config (load-theme 'monokai 'no-confirm))
+
+  ;; ;; --- material-theme -------
+  ;; (use-package material-theme :ensure t
+  ;;   :config
+  ;;   (load-theme 'material 'no-confirm))
+
+  ;; ;; --- paganini-theme -------
+  ;; (use-package paganini-theme :ensure t
+  ;;   :config
+  ;;   (load-theme 'paganini 'no-confirm))
+
+  ;; ;; --- solarized-theme -------
+  ;; (use-package solarized-theme :ensure t
+  ;;   :config
+  ;;   (load-theme 'solarized-light 'no-confirm))
+
+  ;; ;; --- sublime-themes -------
+  ;; (use-package sublime-themes :ensure t
+  ;;   :config
+  ;;   (load-theme 'sublime 'no-confirm))
+
+  ;; ;; --- zenburn-theme -------
+  ;; (use-package zenburn-theme :ensure t
+  ;;   :config
+  ;;   (load-theme 'zenburn 'no-confirm)
+  ;; )
+
+  ;; ;; --- grayscale-theme -------
+  ;; (use-package grayscale-theme :ensure t
+  ;;   ;; :disabled t
+  ;;   :ensure nil
+  ;;   ;; :load-path "site-lisp/grayscale-theme"
+  ;;   :config (load-theme 'grayscale 'no-confirm))
+
+  ;; ;; --- molokai-theme -------
+  ;; (use-package molokai-theme :ensure t
+  ;;   :load-path "themes"
+  ;;   :init (setq molokai-theme-kit t)
+  ;;   :config (load-theme 'molokai t))
+
+  ;; ;; --- color-theme-sanityinc-tomorrow -------
+  ;; (use-package color-theme-sanityinc-tomorrow
+  ;;   :ensure t
+  ;;   :defer t
+  ;;   :config
+  ;;   ;; (load-theme 'sanityinc-tomorrow-day t)
+  ;;   ;; (load-theme 'sanityinc-tomorrow-night t)
+  ;;   ;; (load-theme 'sanityinc-tomorrow-blue t)
+  ;;   ;; (load-theme 'sanityinc-tomorrow-bright t)
+  ;;   ;; (load-theme 'sanityinc-tomorrow-eighties t)
+  ;;   )
+
+  ;; ;; --- faff-theme -------
+  ;; (use-package faff-theme
+  ;;   :ensure t
+  ;;   ;; :disabled t
+  ;;   :init (load-theme 'faff 'no-confirm))
+
+  ;; ;; --- forest-blue-theme -------
+  ;; (use-package forest-blue-theme :ensure t
+  ;;   :config (load-theme 'forest-blue 'no-confirm))
+
+  ;; ;; --- sorcerer-theme -------
+  ;; (use-package sourcerer-theme :ensure t
+  ;;   :config (load-theme 'sourcerer 'no-confirm))
+
+  ;; ;; --- weyland-yutani-theme -------
+  ;; (use-package weyland-yutani-theme :ensure t
+  ;;   :config (load-theme 'weyland-yutani t))
+
+
+  ;; (use-package wh-theming :ensure t
+  ;;   :demand t
+  ;;   :bind (("C-c t n" . wh/theming-load-next-theme)
+  ;;          ("C-c t p" . wh/theming-load-prev-theme))
+  ;;   :init
+  ;;   (setq wh/term-theme 'monokai
+  ;;         wh/gui-themes '(atom-one-dark
+  ;;                         brin
+  ;;                         darkokai
+  ;;                         fogus
+  ;;                         github
+  ;;                         granger
+  ;;                         hickey
+  ;;                         monokai
+  ;;                         odersky
+  ;;                         paganini
+  ;;                         solarized-dark
+  ;;                         solarized-light
+  ;;                         wilson
+  ;;                         zenburn))
+  ;;   :config
+  ;;   (if (memq window-system '(mac ns))
+  ;;       (wh/theming-load-random-theme)
+  ;;     (load-theme wh/term-theme t)))
+
+  ;; ;; --- sublime-themes -------
+  ;; (use-package sublime-themes :ensure t
+  ;;   :config
+  ;;   ;; (set-frame-font "Meslo LG M DZ for Powerline-10" nil t)
+  ;;   (load-theme 'spolsky t))
+
+  ;; ;; --- zenburn-theme -------
+  ;; (use-package zenburn-theme :ensure t
+  ;;   :config (load-theme 'zenburn t))
+
+#+END_SRC
+
+
+** buffer size and position as well as fonts
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; === buffer size and position as well as font =======
+;; frame size and position as well as
+;; font size depending on resolution
+;; https://emacs.stackexchange.com/questions/2269/how-do-i-get-my-initial-frame-to-be-the-desired-size
+(defun set-frame-size-according-to-resolution ()
+	(interactive)
+	(if window-system
+		(progn
+		  ;; use 120 char wide window for largish displays
+		  ;; and smaller 80 column windows for smaller displays
+		  ;; pick whatever numbers make sense for you
+		  (if (> (x-display-pixel-width) 1680)
+;;			  (setq default-frame-alist
+;;					'(;; (top . 25)(left . 5)
+;;					  (top . 10)(left . 100)
+					  ;; (width . 85)(height . 55) ;; for 80 columns
+					  ;; (width . 100)(height . 55) ;; treemacs width 35
+					  ;; (width . 125)(height . 55) ;; treemacs width 35
+					  ;; (width . 150)(height . 55) ;; treemacs width 35
+;;					  (width . 175)(height . 60) ;; treemacs width 35
+					  ;; (width . 250)(height . 55) ;; double buffer treemacs width 35
+					  ;; (font . "Monaco-11")
+					  ;; (font . "Monaco-11.5")
+;;					  (font . "Monaco-12")
+					  ;; (font . "Source Code Pro-11")
+					  ;; (font . "Menlo-11")
+					  ;; (font . "DejaVu Sans Mono-11")
+					  ;; (font . "Consolas-11")
+					  ;; (font . "Anonymous Pro-11")
+					  ;; (font . "Terminus-11")
+					  ;; (font . "Hermit-11")
+					  ;; (font . "Envy Code R-11")
+					  ;; (font . "M+ 2m-11")
+					  ;; (font . "Ubuntu Mono-11")
+					  ;; (font . "San Francisco Text-11")
+					  ;; (font . "San Francisco Display-11")
+					  ;; (font . "Input Sans-11")
+;;					  ))
+			(setq default-frame-alist
+				  '((top . 0)(left . 0)
+					  (width . 175)(height . 60)
+					  (font . "Monaco-12")
+					  ))
+			)
+		  ))
+)
+(set-frame-size-according-to-resolution)
+
+;; https://stackoverflow.com/questions/11007337/emacs-get-new-frame-and-emacsclient-c-to-use-set-frame-size#11008029
+(add-hook 'before-make-frame-hook
+          #'(lambda ()
+              ;;(add-to-list 'default-frame-alist '(left   . 0))
+              ;;(add-to-list 'default-frame-alist '(top    . 0))
+              ;;(add-to-list 'default-frame-alist '(height . 70))
+              ;;(add-to-list 'default-frame-alist '(width  . 80))
+
+                (setq default-frame-alist
+                    '((top . 0)(left . 0)
+                      (width . 160)(height . 70)
+                      (font . "Monaco-12"))
+                )
+            )
+)
+#+END_SRC
+
+
+** rainbow-mode
+#+NAME:
+  #+BEGIN_SRC emacs-lisp
+;; http://elpa.gnu.org/packages/rainbow-mode.html
+(use-package rainbow-mode
+	:defer t
+	:ensure t
+	:config
+	(add-hook 'prog-mode-hook #'rainbow-mode)
+;;  (rainbow-mode)
+)
+#+END_SRC
+
+
+** paradox
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/Malabarba/paradox
+;; https://github.com/domtronn/emacs/blob/master/init.el
+(use-package paradox
+	:defer t
+	:ensure t
+	:commands (paradox-list-packages)
+	:bind (:map paradox-menu-mode-map ("g" . paradox--refresh-remote-data))
+)
+
+;;(use-package paradox
+;;  :ensure t
+;;  :defer t
+;;  :config
+;;  (setq paradox-spinner-type 'progress-bar
+;;        paradox-execute-asynchronously t)
+;;)
+#+END_SRC
+
+
+** quelpa-use-package
+#+NAME:
+  #+BEGIN_SRC emacs-lisp
+;; https://framagit.org/steckerhalter/quelpa-use-package
+;;(use-package quelpa-use-package
+;;	:defer t
+;;	:ensure t
+;;	:init
+;;	(setq quelpa-update-melpa-p nil)
+;;)
+#+END_SRC
+
+
+** auto-minor-mode
+#+NAME:
+  #+BEGIN_SRC emacs-lisp
+;; https://github.com/joewreschnig/auto-minor-mode
+(use-package auto-minor-mode
+	:ensure t
+	:defer t
+)
+#+END_SRC
+
+
+** docker
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/Silex/docker.el/tree/e127a157f8d0d9ffd465075ecf6558f36d2d3b24
+;;(use-package docker :ensure t)
+;;(use-package docker
+;;	:defer t
+;;	:ensure t
+;;	:bind ("C-c d" . docker)
+;;)
+
+;;(use-package docker-api 
+;;	:ensure t
+;;	:defer t
+;;)
+;;(use-package docker-tramp 
+;;	:ensure t
+;;	:defer t	
+;;)
+;;(use-package dockerfile-mode 
+;;	:ensure t
+;;	:defer t	
+;;)
+
+
+;;(use-package dockerfile-mode
+;;  :mode "Dockerfile\\'")
+;;(use-package docker-compose-mode
+;;  :mode ("docker-compose.*\.yml\\'" . docker-compose-mode)
+;;)
+
+#+END_SRC
+
+
+** ssh
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package ssh 
+	:ensure t 	
+	:defer t
+)
+(use-package ssh-deploy 
+	:ensure t
+	:defer t	
+)
+#+END_SRC
+
+
+
+** google
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;(use-package google 
+;;	:ensure t
+;;	:defer t
+;;)
+
+;;(use-package google-maps 
+;;	:ensure t
+;;	:defer t	
+;;)
+
+;;(use-package google-translate :ensure t)
+#+END_SRC
+
+
+** youtube
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;(use-package ivy-youtube 
+;;	:ensure t 	
+;;	:defer t
+;;)
+#+END_SRC
+
+
+** codesearch
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;(use-package counsel-codesearch 
+;;	:ensure t 	
+;;	:defer t
+;;)
+#+END_SRC
+
+
+** iedit
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/tsdh/iedit
+(use-package iedit
+	:defer t
+	:ensure t
+	:config
+	(delete-selection-mode t)
+)
+#+END_SRC
+
+
+** eyebrowse
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/wasamasa/eyebrowse
+;; https://github.com/malb/emacs.d/blob/master/malb.org
+(use-package eyebrowse
+  :ensure t
+  :diminish eyebrowse-mode
+  :init (setq eyebrowse-keymap-prefix (kbd "C-c E"))
+  :config (progn
+            (setq eyebrowse-wrap-around t)
+            (eyebrowse-mode t)
+
+            (defun malb/eyebrowse-new-window-config ()
+              "make new eyebrowse config, re-using indices 1 - (1)0"
+              (interactive)
+              (let ((done nil))
+                (dotimes (i 10)
+                  ;; start at 1 run till 0
+                  (let ((j (mod (+ i 1) 10)))
+                    (when (and (not done)
+                               (not (eyebrowse--window-config-present-p j)))
+                      (eyebrowse-switch-to-window-config j)
+                      (call-interactively 'eyebrowse-rename-window-config j)
+                      (setq done t)))))))
+)
+#+END_SRC
+
+
+** ace-window
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/abo-abo/ace-window
+;; https://github.com/malb/emacs.d/blob/master/malb.org
+(use-package ace-window
+	:ensure t
+	:commands ace-window
+	:bind ("C-x o" . ace-window)
+  :config (progn
+            (setq aw-keys   '(?a ?s ?d ?f ?j ?k ?l)
+                  aw-dispatch-always nil
+                  aw-dispatch-alist
+                  '((?x aw-delete-window     "Ace - Delete Window")
+                    (?c aw-swap-window       "Ace - Swap Window")
+                    (?n aw-flip-window)
+                    (?v aw-split-window-vert "Ace - Split Vert Window")
+                    (?h aw-split-window-horz "Ace - Split Horz Window")
+                    (?g delete-other-windows "Ace - Maximize Window")
+                    (?b balance-windows)
+                    (?u winner-undo)
+                    (?r winner-redo))))
+)
+#+END_SRC
+
+
+** code folding by origami
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package origami 
+	:ensure t
+	:defer t
+	;;	:commands origami-mode
+	:config
+
+	(add-hook 'prog-mode-hook ;; 'c++-mode-hook
+  		(lambda () (interactive)
+;;  		;;			  (origami-mode 1)
+  		(global-origami-mode t) )) 
+;;  		(call-interactively 'origami-close-all-nodes)) t) ;; collapse all nodes by default
+
+	(define-key origami-mode-map (kbd "C-c C-a") 'origami-close-all-nodes)
+	(define-key origami-mode-map (kbd "C-c C-o") 'origami-open-all-nodes)
+	(define-key origami-mode-map (kbd "C-c C-s") 'origami-show-node)
+	(define-key origami-mode-map (kbd "C-c C-c") 'origami-close-node)
+
+;;	(define-key origami-mode-map (kbd "C-c C-f") 'origami-forward-toggle-node)
+;;	(define-key origami-mode-map (kbd "C-c C-r") 'origami-close-node-recursively)
+;;	(define-key origami-mode-map (kbd "C-c C-m") 'origami-open-node-recursively)
+;;	(define-key origami-mode-map (kbd "C-c C-j") 'origami-forward-fold)
+;;	(define-key origami-mode-map (kbd "C-c C-k") 'origami-previous-fold)
+)
+#+END_SRC
+
+
+** org 
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package org
+	:defer t	
+	:ensure t
+	:commands org-mode
+	:mode (("\\.org\\'" . org-mode))
+	:config
+  (require 'org-tempo)
+;;  (setq org-directory "~/Documents/Notes/"
+;;	org-agenda-files '("~/Documents/Notes/")
+;;	org-mobile-directory "~/Documents/Notes/.mobile"
+;;	org-mobile-inbox-for-pull  "~/Documents/Notes/todo.org"
+;;	org-fontify-whole-heading-line t
+;;	org-fontify-done-headline t
+;;	org-fontify-quote-and-verse-blocks t
+;;	org-src-fontify-natively t
+;;	org-src-tab-acts-natively t
+;;	org-src-window-setup 'current-window
+;;	org-confirm-babel-evaluate nil)
+;;  (org-babel-do-load-languages
+;;   'org-babel-load-languages
+;;   '(
+;;     (python . t)
+;; (sh . t))
+)
+#+END_SRC
+
+
+** org babel
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package babel
+	:ensure t
+	:init
+;;  (setq org-confirm-babel-evaluate nil)
+	:defer t
+	:config
+;;  (use-package ob-ipython
+;;    :ensure t
+;;    :defer t)
+)
+#+END_SRC
+
+
+** org bullets
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; --- org-bullets -------
+(use-package org-bullets 
+	:ensure t
+	:config
+	(add-hook 'org-mode-hook (lambda () (org-bullets-mode 1)))
+)
+#+END_SRC
+
+
+** anzu
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/syohex/emacs-anzu
+(use-package anzu
+	:ensure t
+	:bind (("M-%" . anzu-query-replace)
+			   ("C-M-%" . anzu-query-replace-regexp))
+	:diminish (anzu-mode . "")
+	:init
+	(global-anzu-mode +1)
+	:config
+	(setq anzu-cons-mode-line-p t)
+)
+#+END_SRC
+
+
+** projectile
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/bbatsov/projectile
+;;(use-package projectile
+;;  :ensure t
+;;  :defer 1
+;;  :config
+;;  (define-key projectile-mode-map (kbd "C-c p") 'projectile-command-map)
+;;  (projectile-mode t)
+;;  (setq projectile-switch-project-action 'projectile-dired)
+;;;;  (ck/projectile-commander-setup)
+;;)
+
+;;(use-package projectile
+;;	:defer t
+;;	:ensure t
+;;;;	:bind (("C-p s" . projectile-switch-open-project)
+;;;;			("C-x p" . projectile-switch-project))
+;;	:config
+;;	(projectile-global-mode)
+;;	(setq projectile-enable-caching t)
+
+;;	(define-key projectile-mode-map (kbd "s-p") 'projectile-command-map)
+;;	(define-key projectile-mode-map (kbd "C-c p") 'projectile-command-map)
+;;)
+
+(use-package projectile
+	:ensure t
+	:diminish projectile-mode
+  :bind
+  (("C-c p f" . helm-projectile-find-file)
+   ("C-c p p" . helm-projectile-switch-project)
+   ("C-c p s" . projectile-save-project-buffers))
+  :config
+  (projectile-mode +1)
+)
+
+(use-package counsel-projectile
+  :ensure t
+  :config (counsel-projectile-mode)
+)
+#+END_SRC
+
+
+** expand region
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+(use-package expand-region 
+	:defer t
+	:ensure t
+;;	:commands er/expand-region
+;;	:bind ("C-=" . er/expand-region)
+)
+#+END_SRC
+
+
+** dired
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+  ;;https://matthewbauer.us/blog/bauer.html
+  ;; (use-package dired
+  ;;   :ensure nil
+  ;;   :init (require 'dired)
+  ;;   :bind (("C-c J" . dired-double-jump)
+  ;;          :map dired-mode-map
+  ;;          ("C-c C-c" . compile)
+  ;;          ("r" . browse-url-of-dired-file))
+  ;; )
+
+
+;;(use-package dired+
+;;  :ensure t
+;;  :load-path "~/.emacs.d/elpa/dired-plus"
+;;  :init (require 'dired+)
+;;  :bind (("C-c J" . dired-double-jump)
+;;	   :map dired-mode-map
+;;	   ("C-c C-c" . compile)
+;;	   ("r" . browse-url-of-dired-file))
+;;)
+#+END_SRC
+
+
+** ibuffer
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+(use-package ibuffer
+	:defer t
+	:ensure t
+	:bind
+      (
+       ;; ("C-x C-b" . ibuffer)
+       ("C-x C-b" . ibuffer-other-window)
+       ;; :map ibuffer-mode-map
+       ;; ("." . hydra-ibuffer-main/body)
+       )
+      :config
+      (autoload 'ibuffer "ibuffer" "List buffers." t)
+      ;; (add-hook 'ibuffer-hook #'hydra-ibuffer-main/body)
+      ;; (global-set-key (kbd "C-x C-b") 'ibuffer-other-window)
+)
+#+END_SRC
+
+
+** tabbar
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://gist.github.com/3demax/1264635
+(use-package tabbar
+	:defer t
+    :ensure t
+    :init
+     (progn
+      (tabbar-mode 1)
+      (global-set-key (kbd "C-j")  'tabbar-backward-tab)
+      (global-set-key (kbd "C-l")  'tabbar-forward-tab)
+     )
+    :config
+    (set-face-attribute
+    'tabbar-default nil
+    :background "gray20"
+    :foreground "gray20"
+    :box '(:line-width 1 :color "gray20" :style nil)
+    :height 1.25)
+)
+#+END_SRC  
+
+** vterm
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/akermu/emacs-libvterm
+;; https://github.com/akermu/emacs-libvterm#shell-side-configuration
+(use-package vterm
+    :ensure t)
+#+END_SRC  
+
+
+** multi-term
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; http://rawsyntax.com/blog/learn-emacs-zsh-and-multi-term/
+;;(use-package multi-term
+;;	:defer t
+;;	:ensure t
+;;	:bind (("C-c t" . multi-term)
+;;			("C-c \"" . multi-term-dedicated-toggle))
+;;	:config
+;;  (setq multi-term-program (getenv "SHELL")
+;;        multi-term-buffer-name "term"
+;;        multi-term-dedicated-select-after-open-p t)
+;;  (add-hook 'term-mode-hook
+;;            (lambda ()
+;;              (add-to-list 'term-bind-key-alist '("M-[" . multi-term-prev))
+;;              (add-to-list 'term-bind-key-alist '("M-]" . multi-term-next))
+;;              ;; conflict with yasnippet
+;;;;              (yas-minor-mode -1)
+;;;;              (company-mode -1)
+;;  	    )
+;;   )
+;;)
+#+END_SRC  
+
+
+** multiple-cursors
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/magnars/multiple-cursors.el
+;; https://github.com/malb/emacs.d/blob/master/malb.org
+;; http://endlessparentheses.com/multiple-cursors-keybinds.html?source=rss
+(use-package multiple-cursors
+	:defer t
+	:ensure t
+  :config (progn
+            (defun malb/mc-typo-mode ()
+              (add-to-list 'mc/unsupported-minor-modes 'typo-mode))
+            (add-hook 'multiple-cursors-mode-hook #'malb/mc-typo-mode)
+
+            (bind-key "M-3" #'mc/mark-previous-like-this)
+            (bind-key "M-4" #'mc/mark-next-like-this)
+            (bind-key "M-£" #'mc/unmark-previous-like-this)
+            (bind-key "M-$" #'mc/unmark-next-like-this)
+
+            (bind-key "C-;" #'mc/mark-all-dwim)
+
+            (define-prefix-command 'malb/mc-map)
+            (bind-key "m" 'malb/mc-map ctl-x-map)
+
+            (bind-key "a" #'mc/mark-all-like-this malb/mc-map)
+            (bind-key "d" #'mc/mark-all-dwim malb/mc-map)
+            (bind-key "s" #'mc/mark-all-symbols-like-this-in-defun malb/mc-map)
+
+            (bind-key "i" #'mc/insert-numbers malb/mc-map)
+            (bind-key "l" #'mc/insert-letters malb/mc-map)
+
+            (bind-key "h" #'mc-hide-unmatched-lines-mode malb/mc-map)
+
+            (bind-key "R" #'mc/reverse-regions malb/mc-map)
+            (bind-key "S" #'mc/sort-regions malb/mc-map)
+            (bind-key "L" #'mc/edit-lines malb/mc-map)
+
+            (bind-key "C-a" #'mc/edit-beginnings-of-lines malb/mc-map)
+            (bind-key "C-e" #'mc/edit-ends-of-lines malb/mc-map))
+)
+#+END_SRC  
+
+
+** visual bookmark
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/joodland/bm
+;; http://pragmaticemacs.com/emacs/use-visible-bookmarks-to-quickly-jump-around-a-file/
+(use-package bm
+	:defer t
+	:ensure t
+	:demand t
+	:init
+	;; restore on load (even before you require bm)
+	(setq bm-restore-repository-on-load t)
+
+	:config
+	;; Allow cross-buffer 'next'
+	(setq bm-cycle-all-buffers t)
+
+	;; where to store persistant files
+	(setq bm-repository-file "~/.emacs.d/bm-repository")
+
+	;; save bookmarks
+	(setq-default bm-buffer-persistence t)
+
+	;; Loading the repository from file when on start up.
+	(add-hook' after-init-hook 'bm-repository-load)
+
+	;; Saving bookmarks
+	(add-hook 'kill-buffer-hook #'bm-buffer-save)
+
+	;; Saving the repository to file when on exit.
+	;; kill-buffer-hook is not called when Emacs is killed, so we
+	;; must save all bookmarks first.
+         (add-hook 'kill-emacs-hook #'(lambda nil
+                                          (bm-buffer-save-all)
+                                          (bm-repository-save)))
+
+	;; The `after-save-hook' is not necessary to use to achieve persistence,
+	;; but it makes the bookmark data in repository more in sync with the file
+	;; state.
+	(add-hook 'after-save-hook #'bm-buffer-save)
+
+  ;; Restoring bookmarks
+  (add-hook 'find-file-hook   #'bm-buffer-restore)
+  (add-hook 'after-revert-hook #'bm-buffer-restore)
+
+  ;; The `after-revert-hook' is not necessary to use to achieve persistence,
+  ;; but it makes the bookmark data in repository more in sync with the file
+  ;; state. This hook might cause trouble when using packages
+  ;; that automatically reverts the buffer (like vc after a check-in).
+  ;; This can easily be avoided if the package provides a hook that is
+  ;; called before the buffer is reverted (like `vc-before-checkin-hook').
+  ;; Then new bookmarks can be saved before the buffer is reverted.
+  ;; Make sure bookmarks is saved before check-in (and revert-buffer)
+  (add-hook 'vc-before-checkin-hook #'bm-buffer-save)
+
+  :bind (("<f2>" . bm-next)
+         ("S-<f2>" . bm-previous)
+         ("C-<f2>" . bm-toggle))
+)
+#+END_SRC  
+
+
+** page-break-lines
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/purcell/page-break-lines
+(use-package page-break-lines
+  :ensure t
+  :defer t
+  :config
+  (global-page-break-lines-mode)
+)
+#+END_SRC
+
+
+** neotree
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/jaypei/emacs-neotree
+(use-package neotree
+	:defer t
+	:ensure t
+;;	:pin "MELPA Stable"
+;;	:load-path "~/.emacs.d/elpa/neotree-0.5.2"
+;;	:init
+;;	(setq neo-theme (if (display-graphic-p) 'icons 'arrow))
+	:config
+	(require 'neotree)
+	(global-set-key [f8] 'neotree-toggle)
+)
+#+END_SRC
+
+
+** eldoc-mode
+#+NAME: 
+   #+BEGIN_SRC emacs-lisp
+(global-eldoc-mode 1)
+#+END_SRC
+
+
+** mode line
+
+*** mode icons
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;;   https://github.com/ryuslash/mode-icons
+  ;; (use-package mode-icons 
+  ;;   :ensure t
+  ;;   :config
+  ;;   (mode-icons-mode 1)
+  ;;   (setq mode-icons-desaturate-active t)
+  ;; )
+#+END_SRC
+
+
+*** octicons
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/emacsorphanage/octicons
+(use-package octicons 
+	:ensure t
+)
+#+END_SRC
+
+
+
+*** all the icons
+;; https://github.com/domtronn/all-the-icons.el
+#+NAME: name
+;;(use-package all-the-icons 
+;;	:ensure t
+;;	:config
+
+;;  (all-the-icons-insert-icons-for 'alltheicon)
+
+;;	(require 'all-the-icons)
+;;	(require 'all-the-icons-dired)
+;;	(add-hook 'dired-mode-hook 'all-the-icons-dired-mode)
+
+;;  (setq inhibit-compacting-font-caches t)
+
+;;  (all-the-icons-icon-for-buffer)
+
+;;  (all-the-icons-alltheicon)
+;;  (all-the-icons-faicon)
+;;  (all-the-icons-fileicon)
+;;  (all-the-icons-oction)
+;;  (all-the-icons-wicon)
+
+;;  (all-the-icons-octicon "file-binary")  ;; GitHub Octicon for Binary File
+;;  (all-the-icons-faicon  "cogs")         ;; FontAwesome icon for cogs
+;;	(all-the-icons-faicon  "symbol")         ;; FontAwesome icon for cogs
+;;  (all-the-icons-wicon   "tornado")      ;; Weather Icon for tornado       
+
+;;	(all-the-icons :separator-scale 1.25) 
+;;	(setq inhibit-compacting-font-caches t)		
+;;)
+
+;; --- all-the-icons-dired -------
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/jtbm37/all-the-icons-dired
+(use-package all-the-icons-dired
+	:ensure t
+	:config
+	(add-hook 'dired-mode-hook 'all-the-icons-dired-mode)
+)	
+#+END_SRC
+
+
+*** powerline 
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;; --- powerline -------
+;;(use-package powerline 
+;;	:defer t
+;;	:ensure t
+;;  :after expand-region
+;;  :config
+;;  ;; (use-package expand-region
+;;  ;; 	:commands er/expand-region
+;;  ;; 	:bind ("C-=" . er/expand-region))
+;;  ;;  (powerline-default-theme)
+;;  ;;  (powerline-center-evil-theme)
+;;  ;;  (powerline-vim-theme)
+;;  ;;  (powerline-nano-theme)
+;;  ;;  (powerline-center-theme)
+
+;;  (setq powerline-arrow-shape 'curve)
+
+;;  (set-face-attribute 'mode-line nil
+;;    :foreground "Black"
+;;    :background "DarkOrange"
+;;    :box nil)
+
+;;  (set-fontset-font
+;;     t (cons ? ?)
+;;     (font-spec :family "DejaVu Sans Mono for Powerline"))
+;;)
+ #+END_SRC
+
+
+*** smart-mode-line
+   [[https://github.com/Malabarba/smart-mode-line][smart mode line]]
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+  ;; ;; --- smart-mode-line -------
+  ;; (use-package smart-mode-line 
+  ;;   :ensure t
+  ;; ;;  :disabled t	
+  ;;   :config
+
+  ;; ;;;;  (setq powerline-arrow-shape 'arrow)   ;; the default
+  ;; ;;;;  (setq powerline-arrow-shape 'curve)   ;; give your mode-line curves
+  ;; ;;;;  (setq powerline-arrow-shape 'arrow14) ;; best for small fonts
+
+  ;; ;;  (setq powerline-default-separator-dir '(right . left))
+
+  ;; ;;  ;; (setq sml/theme 'dark)
+  ;; ;;  ;; (setq sml/theme 'light)
+  ;; ;;  (setq sml/theme 'respectful)
+
+  ;;   (setq sml/no-confirm-load-theme t)
+  ;; ;;  (sml/setup)
+  ;; )
+
+  ;; (use-package smart-mode-line-powerline-theme
+  ;;    :ensure t
+  ;;    :after powerline
+  ;;    :after smart-mode-line
+  ;;    :config
+  ;;     (sml/setup)
+  ;;     (sml/apply-theme 'powerline)
+  ;; )
+
+  ;; ;;(use-package svg-mode-line-themes
+  ;; ;;  :disabled t
+  ;; ;;  :config
+  ;; ;;  (smt/enable)
+  ;; ;;)
+#+END_SRC
+
+
+*** nyan-mode
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/TeMPOraL/nyan-mode/
+(use-package nyan-mode
+;;	:if window-system
+	:ensure t
+	:config
+	(nyan-mode t)
+	(nyan-toggle-wavy-trail)
+	(nyan-start-animation)
+)
+#+END_SRC
+
+
+*** spaceline
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/TheBB/spaceline
+;;(use-package spaceline
+;;	:ensure t
+;;  :after oiwerkube
+;;	:pin "MELPA Stable"
+;;    :init
+;;    (require 'spaceline-config)
+;;    (spaceline-emacs-theme)
+;;    (spaceline-spacemacs-theme)
+;;    (setq spaceline-highlight-face-func 'spaceline-highlight-face-evil-state)
+;;	:config
+;;  (spaceline-spacemacs-theme)
+;;  (spaceline-helm-mode)
+;;  (spaceline-info-mode)
+;;  (setq-default mode-line-format '("%e" (:eval (spaceline-ml-ati))))
+;;)
+
+
+;;(use-package spaceline-config
+;;  :after spaceline
+;;  :ensure spaceline
+;;  :config
+;;  (setq powerline-default-separator 'wave ;; arrow
+;;	  powerline-height '30
+;;	  spaceline-workspace-numbers-unicode t
+;;	  spaceline-window-numbers-unicode t)
+
+;;  (spaceline-spacemacs-theme)
+;;    (spaceline-emacs-theme)
+;;  (spaceline-helm-mode)
+;;  (spaceline-info-mode)
+;;)
+
+
+;; https://github.com/domtronn/spaceline-all-the-icons.el
+;;(use-package spaceline-all-the-icons
+;;  :after spaceline
+;;  :config
+;;  (setq spaceline-all-the-icons-icon-set-flycheck-slim (quote dots))
+;;  (setq spaceline-all-the-icons-icon-set-git-ahead (quote commit))
+;;  ;; (setq spaceline-all-the-icons-icon-set-window-numbering (quote square))
+;;  (setq spaceline-all-the-icons-flycheck-alternate t)
+;;  (setq spaceline-all-the-icons-highlight-file-name t)
+;;  (setq spaceline-all-the-icons-separator-type (quote none))
+;;)
+
+
+;;(use-package spaceline-all-the-icons 
+;;	:ensure t
+;;	:after spaceline 
+;;	:config 
+;;  (setq spaceline-all-the-icons-icon-set-flycheck-slim (quote dots))
+;;  (setq spaceline-all-the-icons-icon-set-git-ahead (quote commit))
+;;	(setq spaceline-all-the-icons-icon-set-window-numbering (quote square))
+;;  (setq spaceline-all-the-icons-flycheck-alternate t)
+;;  (setq spaceline-all-the-icons-highlight-file-name t)
+;;  (setq spaceline-all-the-icons-separator-type (quote none))
+
+
+;;	(setq spaceline-toggle-all-the-icons-projetcile t)
+;;	(setq spaceline-toggle-all-the-icons-buffer-path t)
+;;	(setq spaceline-toggle-all-the-icons-buffer-id t)
+
+;;	(setq dotspacemacs-mode-line-theme '(all-the-icons :separator-scale 1.25))
+
+
+;;	(spaceline-all-the-icons-theme)
+
+
+;;	(spaceline-all-the-icons--setup-anzu)            ;; Enable anzu searching
+;;	(spaceline-all-the-icons--setup-package-updates) ;; Enable package update indicator
+;;	(spaceline-all-the-icons--setup-git-ahead)       ;; Enable # of commits ahead of upstream in git
+;;	(spaceline-all-the-icons--setup-paradox)         ;; Enable Paradox mode line
+;;	(spaceline-all-the-icons--setup-neotree)         ;; Enable Neotree mode line
+
+;;	(spaceline-toggle-all-the-icons-modified-on)
+;;	(spaceline-toggle-all-the-icons-dedicated-on)
+
+;;	(spaceline-toggle-all-the-icons-buffer-path-on)
+;;	(spaceline-toggle-all-the-icons-buffer-id-on)
+;;	(spaceline-toggle-all-the-icons-buffer-size-on)
+
+;;	(spaceline-toggle-all-the-icons-mode-icon-on)
+;;	(spaceline-toggle-all-the-icons-process-on)
+;;	(spaceline-toggle-all-the-icons-position-on)
+
+;;	(spaceline-toggle-all-the-icons-region-info-on)
+;;	(spaceline-toggle-all-the-icons-narrowed-on)
+
+;;	(spaceline-toggle-all-the-icons-fullscreen-on)
+;;	(spaceline-toggle-all-the-icons-text-scale-on)
+
+;;	(spaceline-toggle-all-the-icons-vc-icon-on)
+;;	(spaceline-toggle-all-the-icons-vc-status-on)
+
+;;	(spaceline-toggle-all-the-icons-git-ahead-on)
+;;	(spaceline-toggle-all-the-icons-package-updates-on)
+
+;;	(spaceline-toggle-all-the-icons-hud-on)
+;;	(spaceline-toggle-all-the-icons-buffer-position-on)
+;;	(spaceline-toggle-all-the-icons-time-on)
+	
+
+;; - `bookmark' [`bookmark']                           Whether or not the current buffer has been modified
+;;	(spaceline-toggle-all-the-icons-bookmark-on)
+
+;; - `window-number' [`winum' or `window-numbering']   The current window number
+
+;; - `eyebrowse' [`eyebrowse']                         The Eyebrowse workspace
+
+;; - `projectile' [`projectile']                       The current project you're working in
+
+;; - `multiple-cursors' [`multiple-cursors']           Show the number of active multiple cursors in use
+
+;; - `git-status' [`git-gutter']                       Number of added/removed lines in current buffer
+;;	(spaceline-toggle-all-the-icons-git-status-on)
+
+;; - `flycheck-status' [`flycheck']                    A summary of Errors/Warnings/Info in buffer
+;;	(spaceline-toggle-all-the-icons-flycheck-status-on)
+
+;; - `flycheck-status-info' [`flycheck']               A summary dedicated to Info statuses in buffer
+
+
+;; - `which-function' [`which-function']               Display the name of function your point is in
+
+;; - `weather' [`yahoo-weather']                       Display an icon of the current weather
+;;	(spaceline-toggle-all-the-icons-weather-on)
+
+;; - `temperature' [`yahoo-weather']                   Display the current temperature with a coloured thermometer
+;; - `sunrise' [`yahoo-weather']                       Display an icon to show todays sunrise time
+;; - `sunset' [`yahoo-weather']                        Display an icon to show todays sunset time
+
+;; - `battery-status' [`fancy-battery']                Display a colour coded battery with time remaining
+
+;; - `nyan-mode' [`nyan-mode']                         Display Nyan Cat as a progress meter through the buffer
+
+;;	(setq spaceline-responsive nil)
+
+;;	(setq powerline-text-scale-factor 1.125)
+;;	(setq spaceline-all-the-icons-separator-scale 1.125)
+
+;;	(setq spaceline-all-the-icons-highlight-file-name t)
+;;	(setq spaceline-all-the-icons-icon-set-modified 'toggle)
+
+;;	(setq spaceline-all-the-icons-separator-type 'slant) ;; 'slant 'wave 'cup 'arrow 'none
+;;	(setq spaceline-all-the-icons-separator-type 'wave) ;; 'slant 'wave 'cup 'arrow 'none
+;;	(setq spaceline-all-the-icons-separator-type 'arrow)
+;;	(setq spaceline-all-the-icons-separator-type 'cup) ;; 'slant 'wave 'cup 'arrow 'none
+
+;;	(setq spaceline-all-the-icons-separator-type 'none)
+
+;;	(setq spaceline-all-the-icons-separator-type (quote wave))
+
+;;	(setq spaceline-flycheck-bullet "❖ %s")
+;;	(setq display-time-format "%-I:%M%p ")
+;;)
+
+;; -------------------------------------------------------------------
+   ;;https://github.com/TheBB/spaceline
+   ;;http://amitp.blogspot.com/2017/01/emacs-spaceline-mode-line.html
+   ;;(use-package spaceline 
+   ;;  :ensure t
+   ;;  :config
+   ;;;;  (setq-default mode-line-format '("%e" (:eval (spaceline-ml-main))))
+   ;;)
+;; -------------------------------------------------------------------
+   ;;(use-package spaceline-config 
+   ;;  :ensure spaceline
+   ;;  :config
+   ;;  (spaceline-helm-mode 1)
+   ;;  ;; (spaceline-emacs-theme)
+   ;;  (spaceline-emacs-theme)
+   ;;  (setq powerline-default-separator 'wave)
+   ;;  (setq powerline-height '20)
+   ;;  (setq spaceline-flycheck-bullet "❖ %s")
+   ;;)
+;; -------------------------------------------------------------------
+   ;;(use-package spaceline-config :ensure spaceline
+   ;;  :config
+   ;;  (spaceline-helm-mode 1)
+   ;;  (spaceline-install
+   ;;   'main
+   ;;   '((buffer-modified)
+   ;;     ((remote-host buffer-id) :face highlight-face)
+   ;;     (process :when active))
+   ;;   '((selection-info :face region :when mark-active)
+   ;;     ((flycheck-error flycheck-warning flycheck-info) :when active)
+   ;;     (which-function)
+   ;;     (version-control :when active)
+   ;;     (line-column)
+   ;;     (global :when active)
+   ;;     (major-mode))))
+
+   ;;(setq-default
+   ;; powerline-height 24
+   ;; powerline-default-separator 'wave
+   ;; spaceline-flycheck-bullet "❖ %s"
+   ;; spaceline-separator-dir-left '(right . right)
+   ;; spaceline-separator-dir-right '(left . left)
+   ;;)
+
+;; -------------------------------------------------------------------
+   ;;(use-package spaceline
+   ;;  :ensure t
+   ;;  :config
+   ;;  (require 'spaceline-config)
+   ;;    (setq spaceline-buffer-encoding-abbrev-p nil)
+   ;;    (setq spaceline-line-column-p nil)
+   ;;    (setq spaceline-line-p nil)
+   ;;    (setq powerline-default-separator (quote arrow))
+   ;;    (spaceline-spacemacs-theme)
+   ;;)
+
+   ;; https://github.com/domtronn/spaceline-all-the-icons.el
+   ;;(use-package spaceline-all-the-icons 
+   ;;  :ensure t
+   ;;  :after spaceline
+   ;;  :config (spaceline-all-the-icons-theme)
+   ;;)
+#+END_SRC
+
+
+*** doom-modeline
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/seagle0128/doom-modeline
+(use-package doom-modeline
+;;	:defer t
+	:ensure t
+;;	:init (doom-modeline-mode 1)
+	:hook (after-init . doom-modeline-mode)
+	:config
+  (setq inhibit-compacting-font-caches t)
+
+;; http://sodaware.sdf.org/notes/emacs-daemon-doom-modeline-icons/
+  (defun enable-doom-modeline-icons (_frame)
+    (setq doom-modeline-icon t))
+    
+  (add-hook 'after-make-frame-functions 
+            #'enable-doom-modeline-icons)
+
+
+	;; How tall the mode-line should be (only respected in GUI Emacs).
+	(setq doom-modeline-height 25)
+
+	;; How wide the mode-line bar should be (only respected in GUI Emacs).
+	(setq doom-modeline-bar-width 3)
+
+  ;; The limit of the window width.
+  ;; If `window-width' is smaller than the limit, some information won't be displayed.
+  (setq doom-modeline-window-width-limit fill-column)
+
+  ;; How to detect the project root.
+  ;; The default priority of detection is `ffip' > `projectile' > `project'.
+  ;; nil means to use `default-directory'.
+  ;; The project management packages have some issues on detecting project root.
+  ;; e.g. `projectile' doesn't handle symlink folders well, while `project' is unable
+  ;; to hanle sub-projects.
+  ;; You can specify one if you encounter the issue.
+  ;; (setq doom-modeline-project-detection 'project)
+  (setq doom-modeline-buffer-file-name-style 'auto)
+
+  ;; Whether display icons in the mode-line.
+  ;; While using the server mode in GUI, should set the value explicitly.
+  (setq doom-modeline-icon (display-graphic-p))
+
+  ;; Whether display the icon for `major-mode'. It respects `doom-modeline-icon'.
+  (setq doom-modeline-major-mode-icon t)
+
+  ;; Whether display the colorful icon for `major-mode'.
+  ;; It respects `all-the-icons-color-icons'.
+  (setq doom-modeline-major-mode-color-icon t)
+
+  ;; Whether display the icon for the buffer state. It respects `doom-modeline-icon'.
+  (setq doom-modeline-buffer-state-icon t)
+
+  ;; Whether display the modification icon for the buffer.
+  ;; It respects `doom-modeline-icon' and `doom-modeline-buffer-state-icon'.
+  (setq doom-modeline-buffer-modification-icon t)
+
+  ;; Whether to use unicode as a fallback (instead of ASCII) when not using icons.
+  (setq doom-modeline-unicode-fallback nil)
+
+  ;; Whether display the minor modes in the mode-line.
+  (setq doom-modeline-minor-modes nil)
+
+  ;; If non-nil, a word count will be added to the selection-info modeline segment.
+  (setq doom-modeline-enable-word-count nil)
+
+  ;; Major modes in which to display word count continuously.
+  ;; Also applies to any derived modes. Respects `doom-modeline-enable-word-count'.
+  ;; If it brings the sluggish issue, disable `doom-modeline-enable-word-count' or
+  ;; remove the modes from `doom-modeline-continuous-word-count-modes'.
+  (setq doom-modeline-continuous-word-count-modes '(markdown-mode gfm-mode org-mode))
+
+  ;; Whether display the buffer encoding.
+  (setq doom-modeline-buffer-encoding t)
+
+  ;; Whether display the indentation information.
+  (setq doom-modeline-indent-info nil)
+
+  ;; If non-nil, only display one number for checker information if applicable.
+  (setq doom-modeline-checker-simple-format t)
+
+  ;; The maximum number displayed for notifications.
+  (setq doom-modeline-number-limit 99)
+
+  ;; The maximum displayed length of the branch name of version control.
+  (setq doom-modeline-vcs-max-length 12)
+
+  ;; Whether display the workspace name. Non-nil to display in the mode-line.
+  (setq doom-modeline-workspace-name t)
+
+  ;; Whether display the perspective name. Non-nil to display in the mode-line.
+  (setq doom-modeline-persp-name t)
+
+  ;; If non nil the default perspective name is displayed in the mode-line.
+  (setq doom-modeline-display-default-persp-name nil)
+
+  ;; If non nil the perspective name is displayed alongside a folder icon.
+  (setq doom-modeline-persp-icon t)
+
+  ;; Whether display the `lsp' state. Non-nil to display in the mode-line.
+  (setq doom-modeline-lsp t)
+
+  ;; Whether display the GitHub notifications. It requires `ghub' package.
+  (setq doom-modeline-github nil)
+
+  ;; The interval of checking GitHub.
+  (setq doom-modeline-github-interval (* 30 60))
+
+  ;; Whether display the modal state icon.
+  ;; Including `evil', `overwrite', `god', `ryo' and `xah-fly-keys', etc.
+  (setq doom-modeline-modal-icon t)
+
+  ;; Whether display the mu4e notifications. It requires `mu4e-alert' package.
+  (setq doom-modeline-mu4e nil)
+
+  ;; Whether display the gnus notifications.
+  (setq doom-modeline-gnus t)
+
+  ;; Wheter gnus should automatically be updated and how often (set to 0 or smaller than 0 to disable)
+  (setq doom-modeline-gnus-timer 2)
+
+  ;; Wheter groups should be excludede when gnus automatically being updated.
+  (setq doom-modeline-gnus-excluded-groups '("dummy.group"))
+
+  ;; Whether display the IRC notifications. It requires `circe' or `erc' package.
+  (setq doom-modeline-irc t)
+
+  ;; Function to stylize the irc buffer names.
+  (setq doom-modeline-irc-stylize 'identity)
+
+  ;; Whether display the environment version.
+  (setq doom-modeline-env-version t)
+  ;; Or for individual languages
+  (setq doom-modeline-env-enable-python t)
+  (setq doom-modeline-env-enable-ruby t)
+  (setq doom-modeline-env-enable-perl t)
+  (setq doom-modeline-env-enable-go t)
+  (setq doom-modeline-env-enable-elixir t)
+  (setq doom-modeline-env-enable-rust t)
+
+  ;; Change the executables to use for the language version string
+  (setq doom-modeline-env-python-executable "python") ; or `python-shell-interpreter'
+  (setq doom-modeline-env-ruby-executable "ruby")
+  (setq doom-modeline-env-perl-executable "perl")
+  (setq doom-modeline-env-go-executable "go")
+  (setq doom-modeline-env-elixir-executable "iex")
+  (setq doom-modeline-env-rust-executable "rustc")
+
+  ;; What to dispaly as the version while a new one is being loaded
+  (setq doom-modeline-env-load-string "...")
+
+  ;; Hooks that run before/after the modeline version string is updated
+  (setq doom-modeline-before-update-env-hook nil)
+  (setq doom-modeline-after-update-env-hook nil)
+
+)
+#+END_SRC
+
+
+*** eyeliner
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/dustinlacewell/eyeliner
+;;(use-package eyeliner
+;;  :straight (eyeliner :type git
+;;                      :host github
+;;                      :repo "dustinlacewell/eyeliner")
+;;  :config
+;;  (require 'eyeliner)
+;;  (eyeliner/install)
+;;)
+#+END_SRC
+
+
+** undo-tree
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+;; undo history as a tree
+(use-package undo-tree
+	:defer t
+	:ensure t
+	:diminish undo-tree-mode
+;;  :init
+;;  ;; autosave the undo-tree history
+;;  (setq undo-tree-history-directory-alist
+;;        `((".*" . ,temporary-file-directory)))
+;;  (setq undo-tree-auto-save-history t)
+;;  (setq undo-tree-visualizer-diff t)
+;;  :config
+;;  (global-undo-tree-mode)
+)
+
+;; http://www.coli.uni-saarland.de/~slemaguer/emacs/main.html
+;;(use-package undo-tree
+;;  :ensure quelpa
+;;  :quelpa (undo-tree :fetcher git :url "http://www.dr-qubit.org/git/undo-tree.git")
+;;  :defer t
+;;  :init
+;;  (setq undo-tree-visualizer-timestamps nil
+;;        undo-tree-visualizer-diff t)
+;;  :config
+;;  (global-undo-tree-mode)
+;;)
+#+END_SRC
+
+
+** which-key
+#+NAME: name
+   #+BEGIN_SRC emacs-lisp
+;; --- which-key -------
+;; bring up help for key bindings
+(use-package which-key 
+	:defer t
+	:ensure t
+	:config 
+	(which-key-mode)
+)
+#+END_SRC
+
+
+** avy
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+(use-package avy
+	:defer t
+	:ensure t
+	:config 
+
+)
+#+END_SRC
+
+
+** clang-format
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/sonatard/clang-format
+;; https://github.com/KratosMultiphysics/Kratos/wiki/How-to-configure-clang%E2%80%90format
+(use-package clang-format
+	:defer t
+	:ensure t
+	:commands (clang-format clang-format-buffer clang-format-region)
+;; 	:bind 
+;;	( :map c++-mode-map 
+;;	 		("C-c i" . clang-format-region)
+;;	 		("C-c u" . clang-format-buffer)
+;;	  :map c-mode-map 
+;;			("C-c i" . clang-format-region)
+;;			("C-c u" . clang-format-buffer)
+;;	  :map objc-mode-map 
+;;			("C-c i" . clang-format-region)
+;;			("C-c u" . clang-format-buffer)
+;;	)
+	:config
+;;	(require 'clang-format)
+	;; (setq clang-format-executable "/usr/bin/clang-format")
+
+	(global-set-key (kbd "C-M-\\") 'clang-format-region)
+	(global-set-key (kbd "C-c u") 'clang-format-buffer)
+	;; (global-set-key (kbd "C-M <tab>") 'clang-format-region)
+	;; (global-set-key (kbd "C-M i") 'clang-format-region)
+	;; (global-set-key [C-M-tab] 'clang-format-region)
+
+	;; (setq-default clang-format-style "llvm")
+	;; (setq-default clang-format-style "Google")
+	;; (setq-default clang-format-style "Webkit")
+	;; (setq-default clang-format-style "Chromium")
+	;; (setq-default clang-format-style "Mozilla")
+
+	;; (setq clang-format-style-option "llvm")
+	;; (setq clang-format-style-option "Google")
+	;; (setq clang-format-style-option "Webkit")
+	;; (setq clang-format-style-option "Chromium")
+	;; (setq clang-format-style-option "Mozilla")
+
+
+;;	https://emacs.stackexchange.com/questions/48500/how-to-clang-format-the-current-buffer-on-save
+;;	(defun clang-format-save-hook-for-this-buffer ()
+;;	  "Create a buffer local save hook."
+;;	  (add-hook 'before-save-hook
+;;		(lambda ()
+;;		  (progn
+;;		    (when (locate-dominating-file "." ".clang-format")
+;;		      (clang-format-buffer))
+;;		    ;; Continue to save.
+;;		    nil))
+;;		nil
+;;		;; Buffer local hook.
+;;		t))
+
+;; Run this for each mode you want to use the hook.
+;;	(add-hook 'c-mode-hook (lambda () (clang-format-save-hook-for-this-buffer)))
+;;	(add-hook 'c++-mode-hook (lambda () (clang-format-save-hook-for-this-buffer)))
+;;  (add-hook 'objc-mode-hook (lambda () (clang-format-save-hook-for-this-buffer)))
+;;	(add-hook 'glsl-mode-hook (lambda () (clang-format-save-hook-for-this-buffer)))
+
+;;	https://eklitzke.org/smarter-emacs-clang-format
+(defun clang-format-buffer-smart ()
+	  "Reformat buffer if .clang-format exists in the projectile root."
+	  (when (f-exists? (expand-file-name ".clang-format" (projectile-project-root)))
+		(clang-format-buffer)))
+
+	(defun clang-format-buffer-smart-on-save ()
+	  "Add auto-save hook for clang-format-buffer-smart."
+	  (add-hook 'before-save-hook 'clang-format-buffer-smart nil t))
+
+ 	  (add-hook 'clang-format-buffer-smart-on-save
+	            '(c-mode-hook c++-mode-hook objc-mode-hook))	
+
+ 	  (add-hook 'c-mode-hook (lambda () (clang-format-buffer-smart-on-save)))
+ 	  (add-hook 'c++-mode-hook (lambda () (clang-format-buffer-smart-on-save)))
+    (add-hook 'objc-mode-hook (lambda () (clang-format-buffer-smart-on-save)))
+
+;;	(add-hook 'c++-mode-hook 
+;;	  (lambda ()
+;;		(add-hook (make-local-variable 'before-save-hook)
+;;		          'clang-format-buffer)))
+
+)
+#+END_SRC
+
+
+** clang-format+
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package clang-format+
+	:ensure t
+;;	:quelpa (clang-format+
+;;	         :fetcher github
+;;     		 :repo "SavchenkoValeriy/emacs-clang-format-plus")
+)
+#+END_SRC           
+
+
+** clang-tidy
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/ch1bo/flycheck-clang-tidy
+(use-package flycheck-clang-tidy
+    :ensure t
+    :after flycheck
+    :hook
+    (flycheck-mode . flycheck-clang-tidy-setup)
+)
+#+END_SRC
+
+
+** quelpa
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/quelpa/quelpa-use-package
+;;(use-package quelpa
+;;  :ensure t
+;;  :config
+;;  ;; upgrade all packages once a week according to https://github.com/quelpa/quelpa
+;;  (setq quelpa-upgrade-interval 7)
+;;  (add-hook #'after-init-hook #'quelpa-upgrade-all-maybe)
+;;)
+
+;;(use-package quelpa-use-package
+;;  :ensure t
+;;)
+
+;;(quelpa
+ ;;'(quelpa-use-package
+ ;;  :fetcher git
+ ;;  :url "https://github.com/quelpa/quelpa-use-package.git"))
+;;(require 'quelpa-use-package)
+#+END_SRC
+
+
+** gdb-mi
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/weirdNox/emacs-gdb
+;;(use-package gdb-mi 
+;;  :quelpa (gdb-mi :fetcher git
+;;                  :url "https://github.com/weirdNox/emacs-gdb.git"
+;;                  :files ("*.el" "*.c" "*.h" "Makefile"))
+;;  :init
+;;  (fmakunbound 'gdb)
+;;  (fmakunbound 'gdb-enable-debug))
+
+;; ;;  (progn
+;;    ;; use gdb-many-windows by default
+;;    (setq-default gdb-many-windows t)
+;;    ;; Non-nil means display source file containing the main routine at startup
+;;    (setq-default gdb-show-main t)
+;;  )
+;; )
+
+(use-package gdb-mi 
+  :defer t
+  :init
+  (progn
+    ;; use gdb-many-windows by default
+    (setq-default gdb-many-windows t)
+    ;; Non-nil means display source file containing the main routine at startup
+    (setq-default gdb-show-main t)
+  )
+)
+#+END_SRC
+
+
+** smart-dash
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package smart-dash
+	:defer t
+	:ensure t
+;;	:config
+;;	(add-hook 'python-mode-hook 'smart-dash-mode)
+;;	(add-hook 'c-mode-hook 'smart-dash-mode)
+;;	(add-hook 'c++-mode-hook 'smart-dash-mode)
+)
+#+END_SRC
+
+
+** smartparens
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;; --- smartparens -------
+;; https://github.com/hlian/emacs-d/blob/master/init-packages.el
+(use-package smartparens 
+	:ensure t
+    :hook
+    (prog-mode . turn-on-smartparens-mode)
+    (markdown-mode . turn-on-smartparens-mode)
+	;; :defer 2
+	;; :diminish smartparens-mode
+	:config
+	(require 'smartparens-config)
+	;; (smartparens-strict-mode t)
+	(smartparens-global-mode t)
+	(show-smartparens-global-mode t)
+
+	;; (add-hook 'prog-mode-hook 'turn-on-smartparens-strict-mode)
+	;; (add-hook 'markdown-mode-hook 'turn-on-smartparens-strict-mode)
+	;; indent with braces for C like languages
+	(sp-with-modes '(rust-mode
+	                 js2-mode
+	                 css-mode
+	                 web-mode
+	                 typescript-mode
+	                 c-mode
+	                 c++-mode
+					         objc-mode
+	                 sh-mode
+    	             go-mode
+        	         shell-mode)
+	(sp-local-pair "{" nil :post-handlers '(("||\n[i]" "RET")))
+	(sp-local-pair "/*" "*/" :post-handlers '((" | " "SPC")
+	                                          ("* ||\n[i]" "RET"))))
+)
+
+
+;; --- smartparens-config -------
+;; https://ebzzry.io/en/emacs-pairs/
+(use-package smartparens-config
+  ;; :ensure t
+  :ensure smartparens
+  :config
+  (progn
+;;    (show-smartparens-global-mode t)
+;;	(add-hook 'prog-mode-hook 'turn-on-smartparens-strict-mode)
+;;	(add-hook 'markdown-mode-hook 'turn-on-smartparens-strict-mode)
+
+	(bind-keys
+	 :map smartparens-mode-map
+	 ("C-M-a" . sp-beginning-of-sexp)
+	 ("C-M-e" . sp-end-of-sexp)
+
+	 ("C-<down>" . sp-down-sexp)
+	 ("C-<up>"   . sp-up-sexp)
+	 ("M-<down>" . sp-backward-down-sexp)
+	 ("M-<up>"   . sp-backward-up-sexp)
+
+	 ("C-M-f" . sp-forward-sexp)
+	 ("C-M-b" . sp-backward-sexp)
+
+	 ("C-M-n" . sp-next-sexp)
+	 ("C-M-p" . sp-previous-sexp)
+
+	 ("C-S-f" . sp-forward-symbol)
+	 ("C-S-b" . sp-backward-symbol)
+
+	 ("C-<right>" . sp-forward-slurp-sexp)
+	 ("M-<right>" . sp-forward-barf-sexp)
+	 ("C-<left>"  . sp-backward-slurp-sexp)
+	 ("M-<left>"  . sp-backward-barf-sexp)
+
+	 ("C-M-t" . sp-transpose-sexp)
+	 ("C-M-k" . sp-kill-sexp)
+	 ("C-k"   . sp-kill-hybrid-sexp)
+	 ("M-k"   . sp-backward-kill-sexp)
+	 ("C-M-w" . sp-copy-sexp)
+;;	 ("C-M-d" . delete-sexp)
+
+	 ("M-<backspace>" . backward-kill-word)
+	 ("C-<backspace>" . sp-backward-kill-word)
+	 ([remap sp-backward-kill-word] . backward-kill-word)
+
+	 ("M-[" . sp-backward-unwrap-sexp)
+	 ("M-]" . sp-unwrap-sexp)
+
+	 ("C-x C-t" . sp-transpose-hybrid-sexp)
+
+;;	 ("C-c ("  . wrap-with-parens)
+;;	 ("C-c ["  . wrap-with-brackets)
+;;	 ("C-c {"  . wrap-with-braces)
+;;	 ("C-c '"  . wrap-with-single-quotes)
+;;	 ("C-c \"" . wrap-with-double-quotes)
+;;	 ("C-c _"  . wrap-with-underscores)
+;;	 ("C-c `"  . wrap-with-back-quotes)
+   )
+   )
+)
+#+END_SRC
+
+
+** rainbow-delimiters
+#+NAME:
+  #+BEGIN_SRC emacs-lisp
+;; https://github.com/Fanael/rainbow-delimiters
+(use-package rainbow-delimiters
+	:defer t
+	:ensure t
+	:config
+	(add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
+)
+#+END_SRC
+
+
+** smart-tabs
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/jcsalomon/smarttabs
+;;(use-package smart-tabs-mode
+;;  :ensure t
+;;  :init
+;;  (progn
+;;    (smart-tabs-insinuate 'c 'c++ 'objc)
+;;  )
+;;)
+#+END_SRC
+
+
+** aggressive-indent
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;;https://github.com/Malabarba/aggressive-indent-mode
+(use-package aggressive-indent
+	:defer t
+	:ensure t
+  ;; :disabled t
+  :commands aggressive-indent-mode
+  :init
+  ;;(add-hook 'emacs-lisp-mode-hook #'aggressive-indent-mode)
+  ;;(add-hook 'clojure-mode-hook #'aggressive-indent-mode)
+  ;; (global-aggressive-indent-mode t)
+  ;; (global-aggressive-indent-mode 1)
+
+	:config
+  ;;(global-aggressive-indent-mode t)
+	(global-aggressive-indent-mode 1)
+  ;;(add-to-list 'aggressive-indent-excluded-modes 'html-mode)
+
+  (add-to-list
+   'aggressive-indent-dont-indent-if
+   '(and (derived-mode-p 'c++-mode)
+         (null (string-match "\\([;{}]\\|\\b\\(if\\|for\\|while\\)\\b\\)"
+                             (thing-at-point 'line)))))
+
+	(setq-default indent-tabs-mode nil)
+;;  (setq-default tab-width 4)
+	;; (setq indent-line-function 'insert-tab)
+  ;; (setq-default js2-tab-width 2)
+  ;; (setq-default js2-basic-offset 2)
+  ;; (setq indent-line-function 'insert-tab)
+)
+#+END_SRC
+
+
+** highlight-indent-guides
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package highlight-indent-guides
+	:defer t
+	:ensure t
+	:commands highlight-indent-guides-mode
+	:preface
+  (progn
+    (add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
+  )
+	:config
+	(progn
+    ;; (setq highlight-indent-guides-method 'fill)
+    ;; (setq highlight-indent-guides-method 'column)
+    (setq highlight-indent-guides-method 'character)
+  )
+)
+#+END_SRC
+
+
+* Build
+
+** cmake-mode
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package cmake-mode
+	:defer t
+	:ensure t
+	:mode (("/CMakeLists\\.txt\\'" . cmake-mode)
+			("\\.cmake\\'" . cmake-mode))
+)
+#+END_SRC
+
+
+** cmake-project
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/alamaison/emacs-cmake-project
+(use-package cmake-project
+;;  :ensure-system-package cmake
+	:defer t
+	:ensure t
+	:after cmake
+;;  :defer 1
+;;  :load-path (mage-ext-dir)
+	:bind (("<f7>" . cp-cmake-build-project)
+		   ("<f8>" . cp-cmake-run-project-with-args))
+	:config
+  (defun maybe-cmake-project-hook ()
+    (if (file-exists-p "CMakeLists.txt") (cmake-project-mode)))
+  (add-hook 'c-mode-hook 'maybe-cmake-project-hook)
+  (add-hook 'c++-mode-hook 'maybe-cmake-project-hook)
+  (add-hook 'objc-mode-hook 'maybe-cmake-project-hook)
+)
+#+END_SRC
+
+
+** cuda-mode
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package cuda-mode
+	:defer t
+	:ensure t
+	:mode "\\.cu\\'"
+)
+#+END_SRC
+
+
+* General Programming
+
+** Flycheck
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/flycheck/flycheck
+(use-package flycheck
+  :ensure t
+  :diminish flycheck-mode
+  :config
+  (add-hook 'after-init-hook #'global-flycheck-mode)
+)
+#+END_SRC          
+
+** yasnippet
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package yasnippet
+	:ensure t
+	:config
+	(yas-global-mode 1)
+)
+#+END_SRC          
+
+** yasnippet-snippets
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/AndreaCrotti/yasnippet-snippets
+(use-package yasnippet-snippets 
+	:defer t
+	:ensure t
+	:after yasnippet
+)
+#+END_SRC          
+
+** auto-yasnippet
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/abo-abo/auto-yasnippet
+;; https://oremacs.com/2015/01/30/auto-yasnippet/
+(use-package auto-yasnippet 
+	:defer t
+	:ensure t
+  :after company
+	:pin "MELPA"
+;;  :bind (("<C-tab>" . company-complete)
+;;     		 ("C-x C-n" . company-select-next)
+;;   	  	 ("C-x C-p" . company-select-previous))
+  :config
+  (require 'auto-yasnippet)
+  (global-set-key (kbd "H-w") #'aya-create)
+  (global-set-key (kbd "H-y") #'aya-expand)
+
+  ;; https://emacs.stackexchange.com/questions/7908/how-to-make-yasnippet-and-company-work-nicer/7925
+  ;;   (global-set-key "\C-o" 'aya-open-line)
+  
+  ;;   (defun aya-open-line ()
+  ;; 	"Call `open-line', unless there are abbrevs or snippets at point.
+  ;; In that case expand them.  If there's a snippet expansion in progress,
+  ;; move to the next field. Call `open-line' if nothing else applies."
+  ;; 	(interactive)
+  ;; 	(cond ((expand-abbrev))
+  
+  ;; 		  ((yas--snippets-at-point)
+  ;; 		   (yas-next-field-or-maybe-expand))
+  
+  ;; 		  ((ignore-errors
+  ;; 			 (yas-expand)))
+
+  ;; 		  (t
+  ;; 		   (open-line 1))))
+)
+#+END_SRC
+
+
+** LSP
+
+*** LSP Mode
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package lsp-mode 
+  :after company
+	:ensure t
+	:commands (lsp lsp-deferred)
+  ;; :hook (lsp-mode . efs/lsp-mode-setup)
+  :init
+  (setq lsp-keymap-prefix "C-c l")  ;; Or 'C-l', 's-l'
+	:config
+	(lsp-enable-which-key-integration t)
+)
+#+END_SRC          
+
+
+*** lsp-treemacs
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/emacs-lsp/lsp-treemacs
+(use-package lsp-treemacs
+	:ensure t
+  :after lsp
+	:config
+	(lsp-treemacs-sync-mode t)
+)
+#+END_SRC          
+
+
+*** LSP UI
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package lsp-ui 
+	:ensure t
+	:commands lsp-ui-mode 
+)
+#+END_SRC          
+
+
+** Company
+
+*** Company Mode
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://mopemope.com/emacs-config/
+(use-package company
+  :ensure t
+;;  :diminish company-mode
+;;  :after lsp-mode
+  :hook ((prog-mode 
+          LaTeX-mode 
+          latex-mode 
+          ess-r-mode 
+          lsp-mode) . company-mode)
+  :bind
+;;  (:map company-active-map
+;;        ([tab] . smarter-tab-to-complete)
+;;        ("TAB" . smarter-tab-to-complete))
+  (:map company-active-map
+          ("C-p" . company-select-previous)
+          ("C-n" . company-select-next)
+          ("<tab>" . company-complete-common-or-cycle)
+          ("<C-tab>" . company-complete-selection))
+  (:map company-search-map
+          ("C-p" . company-select-previous)
+          ("C-n" . company-select-next))
+  (:map lsp-mode-map
+        ("<tab>" . company-indent-or-complete-common))        
+
+  :config
+  (add-hook 'after-init-hook #'global-company-mode)
+  (setq company-show-numbers t)
+  
+  (setq company-minimum-prefix-length 1)
+  (setq company-tooltip-align-annotations t)
+  (setq company-require-match 'never)
+  ;; Don't use company in the following modes
+  ;;(company-global-modes '(not shell-mode eaf-mode))
+  ;; Trigger completion immediately.
+  (setq company-idle-delay 0)
+
+  (defun smarter-tab-to-complete ()
+    "Try to `org-cycle', `yas-expand', and `yas-next-field' at current cursor position.
+    If all failed, try to complete the common part with `company-complete-common'"
+    (interactive)
+    (if yas-minor-mode
+        (let ((old-point (point))
+              (old-tick (buffer-chars-modified-tick))
+              (func-list '(org-cycle yas-expand yas-next-field)))
+          (catch 'func-suceed
+            (dolist (func func-list)
+              (ignore-errors (call-interactively func))
+              (unless (and (eq old-point (point))
+                           (eq old-tick (buffer-chars-modified-tick)))
+                (throw 'func-suceed t)))
+            (company-complete-common)))))
+)
+
+;; https://gist.github.com/fletch/cefeb0ebe01552081d10
+;; http://emacs.stackexchange.com/questions/10431/get-company-to-show-suggestions-for-yasnippet-names
+;; Add yasnippet support for all company backends
+;; https://github.com/syl20bnr/spacemacs/pull/179
+(defvar company-mode/enable-yas t
+  "Enable yasnippet for all backends.")
+
+(defun company-mode/backend-with-yas (backend)
+  (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
+      backend
+    (append (if (consp backend) backend (list backend))
+            '(:with company-yasnippet))))
+
+(setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+
+;; helm-company choose from company completions with C-:
+;;(with-eval-after-load 'company
+;;  (define-key company-mode-map (kbd "C-:") 'helm-company)
+;;  (define-key company-active-map (kbd "C-:") 'helm-company))
+
+#+END_SRC          
+
+
+*** company-lsp
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package company-lsp
+    :ensure t
+    :after lsp-ui
+    :commands company-lsp
+    :config
+    (push '(company-lsp :with company-yasnippet) company-backends)
+)
+#+END_SRC          
+
+
+*** company-box
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package company-box
+  :ensure t
+  :hook (company-mode . company-box-mode)
+)
+#+END_SRC          
+
+
+*** company-quickhelp 
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package company-quickhelp
+	:defer t
+	:ensure t
+	:after company
+	:config 
+	(company-quickhelp-mode t)
+)
+#+END_SRC          
+
+
+*** company-tabnine
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://www.tabnine.com/semantic
+;; https://github.com/MatthewZMD/.emacs.d/blob/master/README.md#company-tabnine
+(use-package company-tabnine
+	:ensure t
+  :after company
+  :defer t
+  :custom
+  (company-tabnine-max-num-results 10)
+  :bind
+  (("M-q" . company-other-backend)
+   ("C-x t" . company-tabnine))
+  :hook
+  (lsp-after-open . (lambda ()
+                      (setq company-tabnine-max-num-results 10)
+                      (add-to-list 'company-transformers 'company//sort-by-tabnine t)
+                      (add-to-list 'company-backends '(company-capf 
+                                                        :with 
+                                                        company-tabnine 
+                                                        company-yasnippet
+                                                        company-files
+                                                        company-dabbrev-code
+                                                        :separate))))
+  (kill-emacs . company-tabnine-kill-process)
+  :config
+  (require 'company-tabnine)  
+  ;; Enable TabNine on default
+  (add-to-list 'company-backends #'company-tabnine)
+
+  ;; Trigger completion immediately.
+  (setq company-idle-delay 0)
+
+  ;; Number the candidates (use M-1, M-2 etc to select completions).
+  (setq company-show-numbers t)  
+
+  ;; Integrate company-tabnine with lsp-mode
+  (defun company//sort-by-tabnine (candidates)
+    (if (or (functionp company-backend)
+            (not (and (listp company-backend) (memq 'company-tabnine company-backends))))
+        candidates
+      (let ((candidates-table (make-hash-table :test #'equal))
+            candidates-lsp
+            candidates-tabnine)
+        (dolist (candidate candidates)
+          (if (eq (get-text-property 0 'company-backend candidate)
+                  'company-tabnine)
+              (unless (gethash candidate candidates-table)
+                (push candidate candidates-tabnine))
+            (push candidate candidates-lsp)
+            (puthash candidate t candidates-table)))
+        (setq candidates-lsp (nreverse candidates-lsp))
+        (setq candidates-tabnine (nreverse candidates-tabnine))
+        (nconc (seq-take candidates-tabnine 3)
+               (seq-take candidates-lsp 7)))))
+)
+
+;;(use-package company-tabnine
+;;	:ensure t
+;;  :after company
+;;	:hook 
+	
+;;	:config	
+;;  (require 'company-tabnine)
+;;  ;; Enable TabNine on default
+;;	(add-to-list 'company-backends #'company-tabnine)
+
+;;  ;; Trigger completion immediately.
+;;  (setq company-idle-delay 0)
+
+;;  ;; Number the candidates (use M-1, M-2 etc to select completions).
+;;  (setq company-show-numbers t)  
+;;)
+#+END_SRC          
+
+
+* Programming
+
+** C/C++/Objective C
+
+*** ccls
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/MaskRay/ccls
+(use-package ccls
+	:ensure t
+	:hook ( (c-mode c++-mode objc-mode) .
+	        (lambda () (require 'ccls) (lsp)) )
+	:config
+  (require 'ccls)
+	(setq ccls-executable "/usr/bin/ccls")
+;;	(setq lsp-prefer-flymake nil)
+;;	(setq lsp-prefer-capf t)  
+;;	(setq-default flycheck-disabled-checkers '(c/c++-clang c/c++-cppcheck c/c++-gcc))
+	        
+)
+#+END_SRC         
+
+
+*** dap
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://awesomeopensource.com/project/MatthewZMD/.emacs.d#org6991900
+(use-package dap-mode
+	:ensure t
+	:diminish
+	:bind
+	(:map dap-mode-map
+        (("<f12>" . dap-debug)
+         ("<f8>" . dap-continue)
+         ("<f9>" . dap-next)
+         ("<M-f11>" . dap-step-in)
+         ("C-M-<f11>" . dap-step-out)
+         ("<f7>" . dap-breakpoint-toggle)))
+	:config
+	(require 'dap-lldb)  
+	(require 'dap-cpptools)
+
+  (setq dap-auto-configure-features '(sessions locals controls tooltip))
+
+(dap-mode 1)
+
+;; The modes below are optional
+(dap-ui-mode 1)
+;; enables mouse hover support
+(dap-tooltip-mode 1)
+;; use tooltips for mouse hover
+;; if it is not enabled `dap-mode' will use the minibuffer.
+(tooltip-mode 1)
+;; displays floating panel with debug buttons
+;; requies emacs 26+
+(dap-ui-controls-mode 1)  
+)
+#+END_SRC
+
+
+** modern c++ font lock
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/ludwigpacifici/modern-cpp-font-lock
+(use-package modern-cpp-font-lock
+	:defer t
+	:ensure t
+;;	:diminish modern-c++-font-lock-mode
+	:config 
+	(add-hook 'c++-mode-hook #'modern-c++-font-lock-mode)
+;;	(modern-c++-font-lock-global-mode t)
+)
+#+END_SRC
+
+
+** elisp-mode
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package elisp-mode
+	:defer t
+	:ensure nil
+	:config
+	(add-hook 'emacs-lisp-mode-hook 'company-mode)  
+)
+#+END_SRC
+
+
+** Python
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package lsp-python-ms
+  :ensure t
+  :hook (python-mode . (lambda ()
+                         (require 'lsp-python-ms)
+                         (lsp)))
+  :init
+  (setq lsp-python-ms-executable (executable-find "python-language-server"))
+)
+
+(use-package python-mode
+  :ensure t
+  :hook (python-mode . lsp-deferred)
+  :custom
+  (dap-python-debugger 'debugpy)
+  ;; NOTE: Set these if Python 3 is called "python3" on your system!
+  ;; (python-shell-interpreter "python3")
+  ;; (dap-python-executable "python3")
+  (dap-python-debugger 'debugpy)
+  :config
+  (require 'dap-python)
+)
+
+(use-package pyvenv
+  :ensure t
+  :config
+  (pyvenv-mode 1)
+)
+#+END_SRC
+
+** Anaconda
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package anaconda-mode
+  :ensure t
+  :init (add-hook 'python-mode-hook 'anaconda-mode)
+        (add-hook 'python-mode-hook 'anaconda-eldoc-mode)
+  :config (use-package company-anaconda
+            :ensure t
+            :init (add-hook 'python-mode-hook 'anaconda-mode)
+            (eval-after-load "company"
+              '(add-to-list 'company-backends '(company-anaconda :with company-capf))))
+)
+#+END_SRC
+
+
+** LaTeX
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; --- auctex -------
+(use-package auctex
+	:defer t
+	:ensure t
+	:config
+    (progn
+      (add-hook 'latex-mode-hook 'smartparens-mode)
+      (add-hook 'LaTeX-mode-hook 'smartparens-mode)
+      (add-hook 'tex-mode-hook 'smartparens-mode)
+      (add-hook 'TeX-mode-hook 'smartparens-mode)
+      (add-hook 'bibtex-mode-hook 'smartparens-mode)
+
+      ;; (add-hook 'LaTeX-mode-hook 'LaTeX-math-mode)
+    )
+)
+#+END_SRC
+
+
+** helm
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package helm 
+	:defer t	
+	:ensure t
+	:init (progn
+            (require 'helm-config)
+		    (setq helm-M-x-fuzzy-match t
+ 	 			  helm-split-window-in-side-p t
+			 	  ;; open helm buffer inside current window, not occupy whole other window
+	 	 	  	  helm-move-to-line-cycle-in-source t
+				  ;; move to end or beginning of source when reaching top or bottom of source.
+				  helm-ff-search-library-in-sexp t
+				  ;; search for library in `require' and `declare-function' sexp.
+				  helm-scroll-amount 8
+				  ;; scroll 8 lines other window using M-<next>/M-<prior>
+				  helm-ff-file-name-history-use-recentf t
+				  helm-autoresize-max-height 25
+				  helm-autoresize-min-height 25
+				  helm-yank-symbol-first t
+				  helm-idle-delay 0.0
+				  helm-input-idle-delay 0.01
+				  helm-quick-update t
+				  helm-M-x-requires-pattern nil
+				  helm-ff-skip-boring-files t))
+	:bind (("C-x b" . helm-mini)
+	       ("M-x" . helm-M-x)
+		   ("C-x 8 <RET>" . helm-ucs))
+)
+
+
+  ;; ;; --- helm-gtags -------
+  ;; (use-package helm-gtags :ensure t
+  ;;   :after helm
+  ;;   :commands (helm-gtags-mode helm-gtags-dwim)
+  ;;   :diminish "HGt"
+  ;;   :init
+  ;;   :config
+  ;;   ;; Enable helm-gtags-mode in code
+  ;;   (add-hook 'c-mode-hook 'helm-gtags-mode)
+  ;;   (add-hook 'c++-mode-hook 'helm-gtags-mode)
+  ;;   (add-hook 'asm-mode-hook 'helm-gtags-mode)
+  ;;   (add-hook 'dired-mode-hook 'helm-gtags-mode)
+  ;;   (add-hook 'eshell-mode-hook 'helm-gtags-mode)
+  ;;   (progn
+  ;;     ;; keys
+  ;;     (define-key helm-gtags-mode-map (kbd "C-c f") 'helm-gtags-dwim)
+  ;; 	(define-key helm-gtags-mode-map (kbd "M-t") 'helm-gtags-find-tag)
+  ;; 	(define-key helm-gtags-mode-map (kbd "M-r") 'helm-gtags-find-rtag)
+  ;; 	(define-key helm-gtags-mode-map (kbd "M-s") 'helm-gtags-find-symbol)
+  ;; 	(define-key helm-gtags-mode-map (kbd "C-c <") 'helm-gtags-previous-history)
+  ;; 	(define-key helm-gtags-mode-map (kbd "C-c >") 'helm-gtags-next-history)
+  ;; 	(define-key helm-gtags-mode-map (kbd "M-,") 'helm-gtags-pop-stack)))
+
+
+;; --- helm-company -------
+(use-package helm-company 
+	:ensure t
+	:defer t
+	:after (company yasnippet)
+	:config
+	(eval-after-load 'company
+	  '(progn
+	   	(define-key company-mode-map (kbd "C-:") 'helm-company)
+		  (define-key company-active-map (kbd "C-:") 'helm-company))
+	)
+)
+#+END_SRC
+
+
+
+* version control
+
+** magit
+#+NAME: name
+#+BEGIN_SRC emacs-lisp
+;; === magit =======
+;; https://seblemaguer.github.io/
+;; https://github.com/seblemaguer/dotfiles
+;; http://www.modernemacs.com/post/pretty-magit/
+;; https://github.com/jtatarik/magit-gitflow
+(use-package magit 
+	:defer t
+	:ensure t
+    ;; :commands (magit-status magit-log)
+	:init
+	(global-set-key (kbd "C-x g") 'magit-status)	
+    ;; (global-magit-file-mode)
+	:config
+
+    ;; ignore recent commit
+    (setq magit-status-sections-hook
+	  '(magit-insert-status-headers
+	    magit-insert-merge-log
+	    magit-insert-rebase-sequence
+	    magit-insert-am-sequence
+	    magit-insert-sequencer-sequence
+	    magit-insert-bisect-output
+	    magit-insert-bisect-rest
+	    magit-insert-bisect-log
+	    magit-insert-untracked-files
+	    magit-insert-unstaged-changes
+	    magit-insert-staged-changes
+	    magit-insert-stashes
+	    magit-insert-unpulled-from-upstream
+	    magit-insert-unpulled-from-pushremote
+	    magit-insert-unpushed-to-upstream
+	    magit-insert-unpushed-to-pushremote))
+
+    ;; update visualization
+;;    (setq pretty-magit-alist nil
+;;	  pretty-magit-prompt nil)
+
+    (defmacro pretty-magit (WORD ICON PROPS &optional NO-PROMPT?)
+      "Replace sanitized WORD with ICON, PROPS and by default add to prompts."
+      `(prog1
+	   (add-to-list 'pretty-magit-alist
+			(list (rx bow (group ,WORD (eval (if ,NO-PROMPT? "" ":"))))
+			      ,ICON ',PROPS))
+	 (unless ,NO-PROMPT?
+	   (add-to-list 'pretty-magit-prompt (concat ,WORD ": ")))))
+
+	(setq pretty-magit-alist nil)
+	(setq pretty-magit-prompt nil)
+	
+;;	(set-fontset-font "fontset-default" '(#xF000 . #xF14FF) "Material Design Icons")
+;;	(set-fontset-font "fontset-default" '(#xF000 . #xF14FF) "FontAwesome") 	 
+
+;;           
+;;   🔨 🔧   ✄                   
+;;                          
+;;      
+	
+	(pretty-magit "Feature" ? (:foreground "slate gray" :height 1.2) t)
+	(pretty-magit "add:"   ? (:foreground "#375E97" :height 1.2) t)	
+	(pretty-magit "fix:"   ? (:foreground "#FB6542" :height 1.2) t)
+	(pretty-magit "clean:" ? (:foreground "#FFBB00" :height 1.2) t)
+	(pretty-magit "docs:"  ? (:foreground "#3F681C" :height 1.2) t)
+	(pretty-magit "master" ? (:box nil :height 1.2) t) ;; :box t
+	(pretty-magit "origin" ? (:box nil :height 1.2) t) ;; :box t
+
+
+;;	(pretty-magit "Add"    (all-the-icons-faicon "plus-circle") (face-foreground 'all-the-icons-blue))
+;;	(pretty-magit "Fix"    (all-the-icons-octicon "bug")        (face-foreground 'all-the-icons-red))
+;;	(pretty-magit "Doc"    (all-the-icons-octicon "file-text")  (face-foreground 'all-the-icons-green))
+;;	(pretty-magit "Clean"  (all-the-icons-faicon  "scissors")   (face-foreground 'all-the-icons-yellow))
+;;	(pretty-magit "Mod"    (all-the-icons-faicon  "wrench")     (face-foreground 'all-the-icons-purple))
+
+
+;;	(pretty-magit "Feature" ? (:foreground "slate gray" :height 1.2 :family "FontAwesome"))
+;;	(pretty-magit "Add" ? (:foreground "#375E97" :height 1.2 :family "FontAwesome"))
+;;	(pretty-magit "Fix" ? (:foreground "#FB6542" :height 1.2 :family "FontAwesome"))
+;;	(pretty-magit ": clean" ?✄ (:foreground "#FFBB00" :height 1.2) pretty-magit-prompt)	
+;;	(pretty-magit "Deleted" ? (:foreground "#FFBB00" :height 1.2 :family "FontAwesome"))
+;;	(pretty-magit "Docs" ? (:foreground "#3F681C" :height 1.2 :family "FontAwesome"))
+
+;;	(pretty-magit "origin" ? (:box t :height 1.2 :family "github-octicons") t)
+;;	(pretty-magit "master" ? (:box t :height 1.2 :family "github-octicons") t)
+
+
+;;	(pretty-magit "web" ?🌐 (:height 1.2) t)
+;;	(pretty-magit "cloud" ?☁ (:height 1.2) t)
+;;	(pretty-magit "private" ?🔒 (:height 1.2) t)
+;;	(pretty-magit "fix" ?🛠 (:height 1.2) t)
+;;	(pretty-magit "bug" ?🐛 (:height 1.2) t)
+
+	;; Operations
+;;	(pretty-magit "add:"      ?  (:foreground "#375E97" :height 1.2) t)
+;;	(pretty-magit "update:"   ?↑   (:foreground "#375E97" :height 1.2) t)
+;;	(pretty-magit "fix:"      ?  (:foreground "#FB6542" :height 1.2) t)
+;;	(pretty-magit "clean:"    ?  (:foreground "#FFBB00" :height 1.2) t)
+;;	(pretty-magit "doc:"      ?  (:foreground "#3F681C" :height 1.2) t)
+
+	;; Meta information
+;;	(pretty-magit "master"    ?  (:box nil :height 1.2)             t)
+;;	(pretty-magit "origin"    ?  (:box nil :height 1.2)             t)
+;;	(pretty-magit "upstream"  ?  (:box nil :height 1.2)             t)
+
+    (defun add-magit-faces ()
+      "Add face properties and compose symbols for buffer from pretty-magit."
+      (interactive)
+      (with-silent-modifications
+	(--each pretty-magit-alist
+	  (-let (((rgx icon props) it))
+	    (save-excursion
+	      (goto-char (point-min))
+	      (while (search-forward-regexp rgx nil t)
+		(compose-region
+		 (match-beginning 1) (match-end 1) icon)
+		(when props
+		  (add-face-text-property
+		   (match-beginning 1) (match-end 1) props))))))))
+
+    (advice-add 'magit-status :after 'add-magit-faces)
+    (advice-add 'magit-refresh-buffer :after 'add-magit-faces)
+
+    ;; opening repo externally
+    (defun parse-url (url)
+      "convert a git remote location as a HTTP URL"
+      (if (string-match "^http" url)
+	  url
+	(replace-regexp-in-string "\\(.*\\)@\\(.*\\):\\(.*\\)\\(\\.git?\\)"
+				  "https://\\2/\\3"
+				  url)))
+
+    (defun magit-open-repo ()
+      "open remote repo URL"
+      (interactive)
+      (let ((url (magit-get "remote" "origin" "url")))
+	(progn
+	  (browse-url (parse-url url))
+	  (message "opening repo %s" url))))
+
+
+    (add-hook 'magit-mode-hook
+	      (lambda ()
+		(local-set-key (kbd "o")
+					'magit-open-repo)))
+)
+
+(use-package magit-gitflow
+	:ensure t 
+	:after magit
+	:defer t  
+  :config
+	(require 'magit-gitflow)
+  (add-hook 'magit-mode-hook 'turn-on-magit-gitflow)
+)
+
+
+
+;; --- magit-tbdiff -------
+(use-package magit-tbdiff 
+	:ensure t 
+	:after magit
+	:defer t  
+)
+
+
+;;(use-package magithub
+;;  :ensure t
+;;  :config 
+;;  (magithub-feature-autoinject t)
+;;  (setq magithub-clone-default-directory "~/github")
+;;)
+
+  ;; (use-package git-commit :ensure t)
+  ;; (use-package gitattributes-mode :ensure t)
+  ;; (use-package gitignore-mode :ensure t)
+  ;; (use-package gitconfig-mode :ensure t
+  ;;   :config
+  ;;   (add-to-list 'auto-mode-alist
+  ;;                '("/\.gitconfig\'"    . gitconfig-mode))
+  ;;   (add-to-list 'auto-mode-alist
+  ;;                '("/vcs/gitconfig\'"    . gitconfig-mode)))
+
+  ;; (use-package git-timemachine :ensure t)
+
+  ;; (use-package gitpatch :ensure t
+  ;;   :config
+  ;;   (setq gitpatch-mail-attach-patch-key "C-c i"))
+
+  ;; (use-package monky :ensure t)
+
+  ;; (use-package hgignore-mode :ensure t)
+  ;; (use-package hgrc-mode :ensure t)
+
+  ;; ;; Github api
+  ;; (use-package gh :ensure t)
+  ;; (use-package gh-md :ensure t)
+
+  ;; ;; Search on github
+  ;; (use-package github-search :ensure t)
+
+  ;; ;; Mapping github with magit
+  ;; (use-package ghub :ensure t)
+  ;; (use-package ghub+ :ensure t)
+
+  ;; ;; --- magithub -------
+  ;; (use-package magithub :ensure t
+  ;;   ;; :pin "Melpa Stable"
+  ;;   :after (:all magit ghub ghub+)
+  ;;   :config (magithub-feature-autoinject t))
+
+  ;; ;; --- magit-filenotify -------
+  ;; (use-package magit-filenotify :ensure t
+  ;;   :config
+  ;;   (add-hook 'magit-status-mode-hook 'magit-filenotify-mode))
+
+  ;; ;; --- magit-gh-pulls -------
+  ;; (use-package magit-gh-pulls :ensure t
+  ;;   :config (add-hook 'magit-mode-hook 'turn-on-magit-gh-pulls))
+
+  ;; (use-package git-gutter :ensure t)
+
+#+END_SRC
+
+
+** auto package update
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+;; https://github.com/rranelli/auto-package-update.el
+(use-package auto-package-update
+   :ensure t
+   :config
+   (setq auto-package-update-delete-old-versions t
+         auto-package-update-interval 4)
+   (auto-package-update-maybe)
+)
+#+END_SRC           
+
+
+* Bible
+
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(use-package dtk
+  :ensure t
+  :bind (("C-c B" . dtk-bible))
+  :custom
+  (dtk-default-module "KJV")
+  (dtk-default-module-category "Biblical Texts")
+  (dtk-word-wrap t)
+)
+#+END_SRC           
+
+
+** elapsed time
+#+NAME:
+#+BEGIN_SRC emacs-lisp
+(message "Start up time %.2fs" (float-time (time-subtract (current-time) my-start-time)))
+#+END_SRC           
