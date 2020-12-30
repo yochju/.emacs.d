@@ -3005,10 +3005,10 @@ tangled, and the tangled file is compiled."
 (use-package magit-gitflow
 	:ensure t 
 	:after magit
-	:defer t  
-  :config
-	(require 'magit-gitflow)
-  (add-hook 'magit-mode-hook 'turn-on-magit-gitflow)
+    :defer t  
+    :config
+    (require 'magit-gitflow)
+    (add-hook 'magit-mode-hook 'turn-on-magit-gitflow)
 )
 
 
