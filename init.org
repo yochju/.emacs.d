@@ -22,10 +22,7 @@
 #+NAME:
 #+BEGIN_SRC emacs-lisp
 ;;; init.el --- Global settings -*- lexical-binding: t; -*-
-
 ;;; Commentary:
-
-;; Here be dragons
 
 ;;; Code:
 ;; https://github.com/larstvei/dot-emacs
