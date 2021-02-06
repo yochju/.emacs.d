@@ -298,10 +298,13 @@ tangled, and the tangled file is compiled."
 ** Defer loading most packages for quicker startup times
 #+NAME:
 #+BEGIN_SRC emacs-lisp
+;; https://thetopsites.net/article/59119792.shtml
 ;; (setq use-package-always-defer t)
 
 ;; Stop at beginning of a word on `forward-word`
+;; replace common word-operations on same-syntax-operations
 (require 'misc)
+
 #+END_SRC
 
 ** Display Time
