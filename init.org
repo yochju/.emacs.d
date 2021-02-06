@@ -299,6 +299,9 @@ tangled, and the tangled file is compiled."
 #+NAME:
 #+BEGIN_SRC emacs-lisp
 ;; (setq use-package-always-defer t)
+
+;; Stop at beginning of a word on `forward-word`
+(require 'misc)
 #+END_SRC
 
 ** Display Time
@@ -1057,6 +1060,15 @@ tangled, and the tangled file is compiled."
 #+END_SRC
 
 
+** hydra
+#+NAME: 
+#+BEGIN_SRC emacs-lisp
+(use-package hydra
+  :ensure t
+  :defer t
+)
+#+END_SRC
+
 ** ibuffer
 #+NAME: 
 #+BEGIN_SRC emacs-lisp
@@ -1100,6 +1112,7 @@ tangled, and the tangled file is compiled."
     :height 1.25)
 )
 #+END_SRC  
+
 
 ** vterm
 #+NAME: 
@@ -1275,7 +1288,7 @@ tangled, and the tangled file is compiled."
 
 ** eldoc-mode
 #+NAME: 
-   #+BEGIN_SRC emacs-lisp
+#+BEGIN_SRC emacs-lisp
 (global-eldoc-mode 1)
 #+END_SRC
 
@@ -2184,7 +2197,7 @@ tangled, and the tangled file is compiled."
 
 ** rainbow-delimiters
 #+NAME:
-  #+BEGIN_SRC emacs-lisp
+#+BEGIN_SRC emacs-lisp
 ;; https://github.com/Fanael/rainbow-delimiters
 (use-package rainbow-delimiters
 	:defer t
@@ -2652,6 +2665,7 @@ tangled, and the tangled file is compiled."
 #+NAME:
 #+BEGIN_SRC emacs-lisp
 ;; https://awesomeopensource.com/project/MatthewZMD/.emacs.d#org6991900
+;; https://github.com/hunner/dap-mode#installation-2
 (use-package dap-mode
 	:ensure t
 	:diminish
@@ -2666,21 +2680,36 @@ tangled, and the tangled file is compiled."
 	:config
 	(require 'dap-lldb)  
 	(require 'dap-cpptools)
+;;  (require 'dap-gdb-lldb)
+
+  (require 'dap-python)
+
+  ;; Set up Node debugging
+  (require 'dap-node)
+  (dap-node-setup) ;; Automatically installs Node debug adapter if needed
 
   (setq dap-auto-configure-features '(sessions locals controls tooltip))
 
-(dap-mode 1)
+  (dap-mode 1)
 
-;; The modes below are optional
-(dap-ui-mode 1)
-;; enables mouse hover support
-(dap-tooltip-mode 1)
-;; use tooltips for mouse hover
-;; if it is not enabled `dap-mode' will use the minibuffer.
-(tooltip-mode 1)
-;; displays floating panel with debug buttons
-;; requies emacs 26+
-(dap-ui-controls-mode 1)  
+  ;; The modes below are optional
+  (dap-ui-mode 1)
+  ;; enables mouse hover support
+  (dap-tooltip-mode 1)
+  ;; use tooltips for mouse hover
+  ;; if it is not enabled `dap-mode' will use the minibuffer.
+  (tooltip-mode 1)
+  ;; displays floating panel with debug buttons
+  ;; requies emacs 26+
+  (dap-ui-controls-mode 1)  
+
+  (add-hook 'dap-stopped-hook
+          (lambda (arg) (call-interactively #'dap-hydra)))
+
+  (general-define-key
+    :keymaps 'lsp-mode-map
+    :prefix lsp-keymap-prefix
+    "d" '(dap-hydra t :wk "debugger"))  
 )
 #+END_SRC
 
@@ -2715,13 +2744,15 @@ tangled, and the tangled file is compiled."
 ** Python
 #+NAME:
 #+BEGIN_SRC emacs-lisp
+
 (use-package lsp-python-ms
   :ensure t
   :hook (python-mode . (lambda ()
                          (require 'lsp-python-ms)
                          (lsp)))
-  :init
-  (setq lsp-python-ms-executable (executable-find "python-language-server"))
+  :init (setq lsp-python-ms-auto-install-server t)                      
+  ;; :init
+  ;; (setq lsp-python-ms-executable (executable-find "python-language-server"))
 )
 
 (use-package python-mode
@@ -2732,9 +2763,14 @@ tangled, and the tangled file is compiled."
   ;; NOTE: Set these if Python 3 is called "python3" on your system!
   ;; (python-shell-interpreter "python3")
   ;; (dap-python-executable "python3")
-  (dap-python-debugger 'debugpy)
+  ;; (dap-python-debugger 'debugpy)
   :config
   (require 'dap-python)
+  (require 'dap-ui)
+  (require 'dap-mode)
+
+  (dap-mode 1)
+  (dap-ui-mode 1)
 )
 
 (use-package pyvenv
@@ -2743,6 +2779,7 @@ tangled, and the tangled file is compiled."
   (pyvenv-mode 1)
 )
 #+END_SRC
+
 
 ** Anaconda
 #+NAME:
